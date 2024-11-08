@@ -27,6 +27,9 @@ def get_config(case):
         parser.add_argument('-load1', '--load_step1_checkpoint', dest='load_step1_checkpoint', action='store_true')
         parser.add_argument('-no-load1', '--not_load_step1_checkpoint', dest='load_step1_checkpoint', action='store_false')
 
+        parser.add_argument('-1run', '--first_run', dest='upload_first_run_step1', action='store_false')
+        parser.add_argument('-2run', '--not_first_run', dest='upload_first_run_step1', action='store_true')
+        
         parser.add_argument('-ne1', '--num_epoch_step1', type = int, help='num_epoch_step1', default = 20, required=True)
         parser.add_argument('-ne2', '--num_epoch_step2', type = int, help='num_epoch_step2', default = 30, required=True)
         parser.add_argument('-lr1', '--learning_rate_step1', type = float, help='learning_rate_step1', default = 0.00005, required=True)
