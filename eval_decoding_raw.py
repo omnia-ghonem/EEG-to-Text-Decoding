@@ -16,16 +16,16 @@ from rouge import Rouge
 from config import get_config
 
 from torch.nn.utils.rnn import pad_sequence
-from dotenv import load_dotenv
+
 
 from langchain_community.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
-
+os.environ["OPENAI_API_KEY"] = "" # GPT4 APIs key
 
 
 # LLMs: Get predictions from ChatGPT
 def chatgpt_refinement(corrupted_text):
-    llm = ChatOpenAI(temperature=0.2, model_name="gpt-4", max_tokens=256, openai_api_key=OPENAI_API_KEY)
+    llm = ChatOpenAI(temperature=0.2, model_name="gpt-4", max_tokens=256)
 
     messages = [
         SystemMessage(content="As a text reconstructor, your task is to restore corrupted sentences to their original form while making minimum changes. You should adjust the spaces and punctuation marks as necessary. Do not introduce any additional information. If you are unable to reconstruct the text, respond with [False]."),
@@ -43,7 +43,7 @@ def chatgpt_refinement(corrupted_text):
 def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_results_path = '/kaggle/working/results_raw/temp.txt' ):
     # modified from: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
 
-    gpt=True
+    gpt=False
 
     print("Saving to: ", output_all_results_path)
     model.eval()   # Set model to evaluate mode
@@ -302,3 +302,4 @@ if __name__ == '__main__':
     
     ''' eval '''
     eval_model(dataloaders, device, tokenizer, criterion, model, output_all_results_path = output_all_results_path)
+
