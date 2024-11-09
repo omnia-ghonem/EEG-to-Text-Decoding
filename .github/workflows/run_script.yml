@@ -1,0 +1,24 @@
+name: Run Python Script with Secret
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  run-script:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+
+      - name: Run Python Script
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # Pass secret as environment variable
+        run: python my_script.py
