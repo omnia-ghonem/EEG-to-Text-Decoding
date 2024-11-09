@@ -25,8 +25,7 @@ os.environ["OPENAI_API_KEY"] = "" # GPT4 APIs key
 
 # LLMs: Get predictions from ChatGPT
 def chatgpt_refinement(corrupted_text):
-    llm = ChatOpenAI(temperature=0.2, model_name="gpt-4", max_tokens=256)
-
+    llm = ChatOpenAI(temperature=0.2, model_name="gpt-4", max_tokens=256, openai_api_key=openai_api_key)
     messages = [
         SystemMessage(content="As a text reconstructor, your task is to restore corrupted sentences to their original form while making minimum changes. You should adjust the spaces and punctuation marks as necessary. Do not introduce any additional information. If you are unable to reconstruct the text, respond with [False]."),
         HumanMessage(content=f"Reconstruct the following text: [{corrupted_text}].")
