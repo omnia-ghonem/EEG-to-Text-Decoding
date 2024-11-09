@@ -2,8 +2,7 @@ name: Run Python Script with Secret
 
 on:
   push:
-    branches:
-      - main
+
 
 jobs:
   run-script:
