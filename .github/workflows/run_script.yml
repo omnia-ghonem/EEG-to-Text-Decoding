@@ -19,5 +19,6 @@ jobs:
 
       - name: Run Python Script
         env:
-          api_key: ${{env.MY_VALUE}}  # Pass secret as environment variable
+          env_var: ${{ vars.MY_VALUE }}
+          api_key: ${{secrets.MY_VALUE}}  # Pass secret as environment variable
         run: python scripts/scripts.py 
