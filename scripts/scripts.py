@@ -1,7 +1,7 @@
 import os
 
 # Access the GitHub secret from the environment
-secret_value = os.getenv("MY_SECRET")
+secret_value = os.environ("api_key")
 
 if secret_value:
     print(f"Secret successfully retrieved:{secret_value }")
