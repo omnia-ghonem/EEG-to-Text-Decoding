@@ -20,4 +20,4 @@ jobs:
       - name: Run Python Script
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # Pass secret as environment variable
-        run: python scripts.py
+        run: python scripts/script.py
