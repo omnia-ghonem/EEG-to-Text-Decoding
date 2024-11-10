@@ -42,7 +42,7 @@ def chatgpt_refinement(corrupted_text, api_key):
     
     return output
 
-def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_results_path = '/kaggle/working/results_raw/temp.txt', api_key ):
+def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_results_path = '/kaggle/working/results_raw/temp.txt', api_key = '1234' ):
     # modified from: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
 
     gpt=True
