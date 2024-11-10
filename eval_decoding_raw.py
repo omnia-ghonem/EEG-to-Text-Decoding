@@ -18,7 +18,7 @@ from config import get_config
 from torch.nn.utils.rnn import pad_sequence
 
 
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 
 
