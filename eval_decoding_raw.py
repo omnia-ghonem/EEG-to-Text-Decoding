@@ -303,5 +303,5 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
     
     ''' eval '''
-    eval_model(dataloaders, device, tokenizer, criterion, model, output_all_results_path = output_all_results_path,api_key)
+    eval_model(dataloaders, device, tokenizer, criterion, model, api_key, output_all_results_path = output_all_results_path)
 
