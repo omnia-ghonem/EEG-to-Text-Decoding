@@ -24,4 +24,4 @@ jobs:
         env:
           env_var: ${{vars.AI}}
           api_key: ${{secrets.MY_VALUE}}  # Pass secret as environment variable
-        run: python eval_decoding_raw.py
+        run: python scripts/scripts.py
