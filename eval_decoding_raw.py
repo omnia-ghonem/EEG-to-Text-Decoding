@@ -18,7 +18,7 @@ from config import get_config
 from torch.nn.utils.rnn import pad_sequence
 
 
-from geminai import GeminaiAPI  # Replace with actual GeminiAI import
+import google.generativeai as genai
 from langchain.schema import HumanMessage, SystemMessage
 
 
@@ -28,15 +28,23 @@ secret_value = os.environ.get("env_var")
 
 # LLMs: Get predictions from ChatGPT
 def chatgpt_refinement(corrupted_text, api_key):
-    llm = GeminaiAPI(api_key=api_key, temperature=0.2, model_name="gemini-large", max_tokens=256)
-    prompt = (
-        "As a text reconstructor, your task is to restore corrupted sentences to their original form while making "
-        "minimum changes. You should adjust the spaces and punctuation marks as necessary. Do not introduce any "
-        "additional information. If you are unable to reconstruct the text, respond with [False]."
+    # Configure the API key
+    genai.configure(api_key=api_key)
+    
+    # Set up the model with the correct model name
+    model = genai.GenerativeModel(model_name='gemini-pro')
+    
+    # Generate the content
+    response = model.generate_content(
+        f"As a text reconstructor, your task is to restore corrupted sentences to their original form while making minimum changes. "
+        f"You should adjust the spaces and punctuation marks as necessary. Do not introduce any additional information. "
+        f"If you are unable to reconstruct the text, respond with [False]. Reconstruct the following text: [{corrupted_text}]"
     )
-    output = llm.complete(prompt=f"{prompt}\n\nReconstruct the following text: [{corrupted_text}].")
-    output_text = output['text'].replace('[', '').replace(']', '')
-
+    
+    # Access the response text
+    output_text = response.generations[0].text  # Adjusted to handle response format
+    
+    # Return the original text if the output indicates reconstruction failure
     if len(output_text) < 10 and 'False' in output_text:
         return corrupted_text
     
