@@ -22,7 +22,6 @@ import google.generativeai as genai
 from langchain.schema import HumanMessage, SystemMessage
 
 
-secret_value = os.environ.get("env_var")
 
 
 
@@ -42,7 +41,7 @@ def chatgpt_refinement(corrupted_text, api_key):
     )
     
     # Access the response text
-    output_text = response.generations[0].text  # Adjusted to handle response format
+    output_text = response.text  # Adjusted to handle response format
     
     # Return the original text if the output indicates reconstruction failure
     if len(output_text) < 10 and 'False' in output_text:
