@@ -19,6 +19,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded  # Correct import
 from langchain.schema import HumanMessage, SystemMessage
 import time
 
