@@ -20,34 +20,28 @@ from torch.nn.utils.rnn import pad_sequence
 
 import google.generativeai as genai
 from langchain.schema import HumanMessage, SystemMessage
+import time
 
-
-
-
-
-# LLMs: Get predictions from ChatGPT
 def chatgpt_refinement(corrupted_text, api_key):
-    # Configure the API key
     genai.configure(api_key=api_key)
-    
-    # Set up the model with the correct model name
     model = genai.GenerativeModel(model_name='gemini-pro')
     
-    # Generate the content
-    response = model.generate_content(
-        f"As a text reconstructor, your task is to restore corrupted sentences to their original form while making minimum changes. "
-        f"You should adjust the spaces and punctuation marks as necessary. Do not introduce any additional information. "
-        f"If you are unable to reconstruct the text, respond with [False]. Reconstruct the following text: [{corrupted_text}]"
-    )
-    
-    # Access the response text
-    output_text = response.text  # Adjusted to handle response format
-    
-    # Return the original text if the output indicates reconstruction failure
-    if len(output_text) < 10 and 'False' in output_text:
-        return corrupted_text
-    
-    return output_text
+    try:
+        response = model.generate_content(
+            f"As a text reconstructor, your task is to restore corrupted sentences to their original form while making minimum changes. "
+            f"You should adjust the spaces and punctuation marks as necessary. Do not introduce any additional information. "
+            f"If you are unable to reconstruct the text, respond with [False]. Reconstruct the following text: [{corrupted_text}]"
+        )
+        output_text = response.text
+        
+        if len(output_text) < 10 and 'False' in output_text:
+            return corrupted_text
+        return output_text
+    except google.api_core.exceptions.ResourceExhausted as e:
+        print("Quota exceeded. Retrying after a delay...")
+        time.sleep(2)  # Wait for a few seconds before retrying
+        return chatgpt_refinement(corrupted_text, api_key)
+
 
 def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234', output_all_results_path = '/kaggle/working/results_raw/temp.txt' ):
     # modified from: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
