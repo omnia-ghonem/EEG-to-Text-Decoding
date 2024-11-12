@@ -18,31 +18,25 @@ from config import get_config
 from torch.nn.utils.rnn import pad_sequence
 
 
-import google.generativeai as genai
-from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded  # Correct import
+from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
-import time
 
+
+# LLMs: Get predictions from ChatGPT
 def chatgpt_refinement(corrupted_text, api_key):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name='gemini-pro')
-    
-    try:
-        response = model.generate_content(
-            f"As a text reconstructor, your task is to restore corrupted sentences to their original form while making minimum changes. "
-            f"You should adjust the spaces and punctuation marks as necessary. Do not introduce any additional information. "
-            f"If you are unable to reconstruct the text, respond with [False]. Reconstruct the following text: [{corrupted_text}]"
-        )
-        output_text = response.text
-        
-        if len(output_text) < 10 and 'False' in output_text:
-            return corrupted_text
-        return output_text
-    except google.api_core.exceptions.ResourceExhausted as e:
-        print("Quota exceeded. Retrying after a delay...")
-        time.sleep(2)  # Wait for a few seconds before retrying
-        return chatgpt_refinement(corrupted_text, api_key)
+    llm = ChatOpenAI(temperature=0.2, model_name="gpt-4", max_tokens=256, openai_api_key=api_key)
+    messages = [
+        SystemMessage(content="As a text reconstructor, your task is to restore corrupted sentences to their original form while making minimum changes. You should adjust the spaces and punctuation marks as necessary. Do not introduce any additional information. If you are unable to reconstruct the text, respond with [False]."),
+        HumanMessage(content=f"Reconstruct the following text: [{corrupted_text}].")
+    ]
 
+    output = llm(messages).content
+    output = output.replace('[','').replace(']','')
+    
+    if len(output)<10 and 'False' in output:
+        return corrupted_text
+    
+    return output
 
 def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234', output_all_results_path = '/kaggle/working/results_raw/temp.txt' ):
     # modified from: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
