@@ -471,7 +471,7 @@ if __name__ == '__main__':
         '''step one trainig'''
     ######################################################
         if upload_first_run_step1 :
-            stepone_checkpoint_not_first = '/kaggle/input/notebook87d880d0c0/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b1_5_25_5e-05_5e-05_unique_sent.pt'
+            stepone_checkpoint_not_first = '/kaggle/input/train-batch-1-eeg-to-text/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b1_7_14_5e-05_5e-05_unique_sent.pt'
             print(f'not first run for step 1, load checkpoint: {stepone_checkpoint_not_first}')
             model.load_state_dict(torch.load(stepone_checkpoint_not_first))
         model.to(device)
