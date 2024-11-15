@@ -2,10 +2,10 @@ python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw.py --model_name B
     --task_name task1_task2_taskNRv2 \
     --two_step \
     --pretrained \
-    --not_load_step1_checkpoint \
-    --not_first_run \
-    --num_epoch_step1 6 \
-    --num_epoch_step2 14 \
+    --load_step1_checkpoint \
+    --first_run \
+    --num_epoch_step1 3 \
+    --num_epoch_step2 8 \
     -lr1 0.00005 \
     -lr2 0.00005 \
     -b 1\
