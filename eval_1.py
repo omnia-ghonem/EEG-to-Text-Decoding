@@ -80,7 +80,6 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             target_string = tokenizer.decode(target_ids_batch[0], skip_special_tokens = True)
 
 
-            f.write(f'target string: {target_string}\n')
             target_tokens_string = "["
             for el in target_tokens:
                 target_tokens_string = target_tokens_string + str(el) + " "
@@ -237,7 +236,7 @@ if __name__ == '__main__':
     ''' set up dataloader '''
     whole_dataset_dicts = []
     if 'task1' in task_name:
-        dataset_path_task1 = '/kaggle/input/zab-eval/task2-NR-dataset_wRaw.pickle' 
+        dataset_path_task1 = args['pickle_file_path']
         with open(dataset_path_task1, 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
 
