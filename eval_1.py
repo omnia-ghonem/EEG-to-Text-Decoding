@@ -84,7 +84,6 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             for el in target_tokens:
                 target_tokens_string = target_tokens_string + str(el) + " "
             target_tokens_string += "]"
-            f.write(f'target tokens: {target_tokens_string}\n')
 
             # add to list for later calculate bleu metric
             target_tokens_list.append([target_tokens])
@@ -136,7 +135,6 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             for el in pred_tokens:
                 pred_tokens_string = pred_tokens_string + str(el) + " "
             pred_tokens_string += "]"
-            f.write(f'predicted tokens (truncated): {pred_tokens_string}\n')
             f.write(f'################################################\n\n\n')
 
             sample_count += 1
