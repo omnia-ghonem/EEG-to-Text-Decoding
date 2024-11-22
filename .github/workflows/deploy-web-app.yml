@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pages: write
-      id-token: ${{ secrets.GIT_TOKEN }}
+      id-token: write
 
     environment:
       name: github-pages
