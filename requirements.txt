@@ -6,4 +6,3 @@ transformers==4.30.0
 nltk==3.7
 rouge-score==0.1.2
 langchain==0.0.248
-fastapi==0.115.5
