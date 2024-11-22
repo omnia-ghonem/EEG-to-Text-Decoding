@@ -26,4 +26,4 @@ jobs:
 
     - name: Run FastAPI App
       run: |
-        uvicorn mainapp.main:app --host 0.0.0.0 --port 8000
+        uvicorn master/mainapp:app --host 0.0.0.0 --port 8000
