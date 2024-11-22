@@ -11,46 +11,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v3
 
-    - name: Setup Python Environment
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: 3.11
 
-    - name: Install Python Dependencies
+    - name: Install Dependencies
       run: |
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Deploy to GitHub Pages
-      uses: actions/deploy-pages@v4.0.5
-      with:
-        artifact_name: web-app
-        path: mainapp  # Specify the 'mainapp' directory for deployment
-
-
-    - name: Upload Artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: build/web
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-    - name: Setup Pages
-      uses: actions/configure-pages@v5
-
-    - name: Deploy to GitHub Pages 🚀
-      uses: actions/deploy-pages@v4.0.5
-      with:
-        artifact_name: github-pages-artifact
+    - name: Run FastAPI App
+      run: |
+        uvicorn mainapp.main:app --host 0.0.0.0 --port 8000
