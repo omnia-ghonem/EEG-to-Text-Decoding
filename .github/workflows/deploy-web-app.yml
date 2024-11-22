@@ -38,7 +38,7 @@ jobs:
       uses: actions/deploy-pages@v4.0.5
       with:
         artifact_name: web-app
-        path: mainapp  # Specify the 'mainapp' directory for deployment
+        path: master/mainapp  # Specify the 'mainapp' directory for deployment
 
     - name: Upload Artifact
       uses: actions/upload-pages-artifact@v3
