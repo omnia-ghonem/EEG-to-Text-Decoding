@@ -23,10 +23,12 @@ jobs:
       run: |
         pip install -r requirements.txt
 
-    - name: Build the Web App
-      run: |
-        mkdir -p build/web
-        cp -r mainapp/* build/web/
+    - name: Deploy to GitHub Pages
+      uses: actions/deploy-pages@v4.0.5
+      with:
+        artifact_name: web-app
+        path: mainapp  # Specify the 'mainapp' directory for deployment
+
 
     - name: Upload Artifact
       uses: actions/upload-pages-artifact@v3
