@@ -418,7 +418,7 @@ if __name__ == '__main__':
 
     if skip_step_one:
         if load_step1_checkpoint:
-            stepone_checkpoint = '/kaggle/input/batch-1-step-2-5/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_skipstep1_b1_3_4_5e-05_5e-05_unique_sent.pt'
+            stepone_checkpoint = '/kaggle/input/batch-1-step-2-6/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_skipstep1_b1_3_4_5e-05_5e-05_unique_sent.pt'
             print(f'skip step one, load checkpoint: {stepone_checkpoint}')
             model.load_state_dict(torch.load(stepone_checkpoint))
         else:
