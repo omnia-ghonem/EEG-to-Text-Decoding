@@ -216,8 +216,8 @@ if __name__ == '__main__':
     task_name = training_config['task_name']    
     model_name = training_config['model_name']
 
-    predicted_output_path = f'/kaggle/working/results_raw/{task_name}-{model_name}-_decoding_results_predicted.txt'
-    refined_output_path = f'/kaggle/working/results_raw/{task_name}-{model_name}-_decoding_results_refined.txt'
+    predicted_output_path = f'/kaggle/working/results_raw/{task_name}-{model_name}-decoding_results_predicted.txt'
+    refined_output_path = f'/kaggle/working/results_raw/{task_name}-{model_name}-decoding_results_refined.txt'
 
     ''' set random seeds '''
     seed_val = 312
