@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+    <h2>Results</h2>
+    <div class="rectangle">
+        <h3>BART Prediction</h3>
+        <p>{{ bart_prediction }}</p>
+    </div>
+    <div class="rectangle">
+        <h3>GPT-4 Refined</h3>
+        <p>{{ gpt_refined }}</p>
+    </div>
+    <a href="/">Go back</a>
+</section>
+{% endblock %}
