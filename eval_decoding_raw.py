@@ -41,7 +41,7 @@ def chatgpt_refinement(corrupted_text, api_key):
 def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234', output_all_results_path = '/kaggle/working/results_raw/temp.txt' ):
     # modified from: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
 
-    gpt=True
+    gpt=False
 
     print("Saving to: ", output_all_results_path)
     model.eval()   # Set model to evaluate mode
