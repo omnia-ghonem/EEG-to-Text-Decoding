@@ -38,12 +38,14 @@ def chatgpt_refinement(corrupted_text, api_key):
     
     return output
 
-def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234', output_all_results_path = '/kaggle/working/results_raw/temp.txt' ):
+def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234',predicted_output_path='/kaggle/working/results_raw/predicted_strings.txt',
+    refined_output_path='/kaggle/working/results_raw/refined_strings.txt'):
     # modified from: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
 
     gpt=False
 
-    print("Saving to: ", output_all_results_path)
+    print("Saving predicted strings to:", predicted_output_path)
+    print("Saving refined strings to:", refined_output_path)
     model.eval()   # Set model to evaluate mode
     running_loss = 0.0
 
@@ -57,7 +59,7 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
     refine_tokens_list = []
     refine_string_list = []
 
-    with open(output_all_results_path,'w') as f:
+    with open(predicted_output_path, 'w') as pred_file, open(refined_output_path, 'w') as refine_file:
         for _, seq_len, input_masks, input_mask_invert, target_ids, target_mask, sentiment_labels, sent_level_EEG, input_raw_embeddings, input_raw_embeddings_lengths, word_contents, word_contents_attn, subject_batch in dataloaders['test']:
 
             # load in batch
@@ -108,7 +110,9 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             predictions = torch.squeeze(predictions)
             predicted_string = tokenizer.decode(predictions).split('</s></s>')[0].replace('<s>','')
             # print('predicted string:',predicted_string)
-            f.write(f'predicted string: {predicted_string}\n')
+            pred_file.write(predicted_string + '\n')
+
+
             
             # convert to int list
             predictions = predictions.tolist()
@@ -126,7 +130,7 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             # chatgpt refinement and tokenizer decode
             if gpt:
                 predicted_string_chatgpt = chatgpt_refinement(predicted_string,api_key).replace('\n','')
-                f.write(f'refined string: {predicted_string_chatgpt}\n')
+                refine_file.write(predicted_string_chatgpt + '\n')
                 refine_tokens_list.append(tokenizer.convert_ids_to_tokens(tokenizer(predicted_string_chatgpt)['input_ids'], skip_special_tokens=True))
                 refine_string_list.append(predicted_string_chatgpt)
 
@@ -135,7 +139,6 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             for el in pred_tokens:
                 pred_tokens_string = pred_tokens_string + str(el) + " "
             pred_tokens_string += "]"
-            f.write(f'################################################\n\n\n')
 
             sample_count += 1
             # statistics
@@ -213,7 +216,9 @@ if __name__ == '__main__':
     task_name = training_config['task_name']    
     model_name = training_config['model_name']
 
-    output_all_results_path = f'/kaggle/working/results_raw/{task_name}-{model_name}-all_decoding_results.txt'
+    predicted_output_path = f'/kaggle/working/results_raw/{task_name}-{model_name}-_decoding_results_predicted.txt'
+    refined_output_path = f'/kaggle/working/results_raw/{task_name}-{model_name}-_decoding_results_refined.txt'
+
     ''' set random seeds '''
     seed_val = 312
     np.random.seed(seed_val)
@@ -289,4 +294,4 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
     
     ''' eval '''
-    eval_model(dataloaders, device, tokenizer, criterion, model, api_key, output_all_results_path = output_all_results_path)
+    eval_model(dataloaders, device, tokenizer, criterion, model, api_key, predicted_output_path = predicted_output_path, refined_output_path = refined_output_path)
