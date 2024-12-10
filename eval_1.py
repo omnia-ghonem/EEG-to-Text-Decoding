@@ -110,7 +110,7 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             predictions = torch.squeeze(predictions)
             predicted_string = tokenizer.decode(predictions).split('</s></s>')[0].replace('<s>','')
             # print('predicted string:',predicted_string)
-            pred_file.write(predicted_string + '\n')
+            pred_file.write(predicted_string)
 
 
             
@@ -130,7 +130,7 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
             # chatgpt refinement and tokenizer decode
             if gpt:
                 predicted_string_chatgpt = chatgpt_refinement(predicted_string,api_key).replace('\n','')
-                refine_file.write(predicted_string_chatgpt + '\n')
+                refine_file.write(predicted_string_chatgpt)
                 refine_tokens_list.append(tokenizer.convert_ids_to_tokens(tokenizer(predicted_string_chatgpt)['input_ids'], skip_special_tokens=True))
                 refine_string_list.append(predicted_string_chatgpt)
 
