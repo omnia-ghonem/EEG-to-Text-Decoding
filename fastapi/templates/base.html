@@ -16,5 +16,21 @@
     <footer>
         <p>© 2024 FastAPI Web App</p>
     </footer>
+    <div id="loading">
+        <div class="spinner"></div>
+    </div>
+    <script>
+        // Show loading spinner during form submission
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.querySelector("form");
+            const loading = document.getElementById("loading");
+            
+            if (form) {
+                form.addEventListener("submit", function () {
+                    loading.style.display = "flex";
+                });
+            }
+        });
+    </script>
 </body>
 </html>
