@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+    <h2>Upload a Pickle File</h2>
+    <form action="/submit" method="post" enctype="multipart/form-data">
+        <label for="file">Select a pickle file:</label>
+        <input type="file" id="file" name="file" accept=".pkl" required>
+        <button type="submit">Submit</button>
+    </form>
+</section>
+{% endblock %}
