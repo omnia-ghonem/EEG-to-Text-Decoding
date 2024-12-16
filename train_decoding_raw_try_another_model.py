@@ -11,7 +11,16 @@ import json
 from glob import glob
 import time
 from tqdm import tqdm
-from transformers import BartTokenizer, BartForConditionalGeneration, BertTokenizer, BertConfig, BertForSequenceClassification, RobertaTokenizer, RobertaForSequenceClassification,XLNetTokenizer, XLNetForConditionalGeneration, get_linear_schedule_with_warmup
+from transformers import (BartTokenizer, 
+BartForConditionalGeneration, 
+BertTokenizer, BertConfig, 
+BertForSequenceClassification, 
+RobertaTokenizer, '
+RobertaForSequenceClassification,
+AutoProcessor,
+AutoTokenizer,
+LlavaConfig,
+LlavaForConditionalGeneration)
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
@@ -331,7 +340,7 @@ if __name__ == '__main__':
         json.dump(args, out_config, indent=4)
 
     if model_name in ['BrainTranslator', 'BrainTranslatorNaive']:
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
+        tokenizer =  AutoTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf", use_fast=True)
     # train dataset
     train_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
                              eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
@@ -386,7 +395,7 @@ if __name__ == '__main__':
 
     ''' set up model '''
     if model_name == 'BrainTranslator':
-        pretrained = XLNetForConditionalGeneration.from_pretrained('xlnet-base-cased')
+        pretrained =  LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map=0, torch_dtype=torch.float16)
         model = model_decoding_raw.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
                                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
