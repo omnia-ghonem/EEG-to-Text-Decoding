@@ -8,7 +8,12 @@ import json
 import matplotlib.pyplot as plt
 from glob import glob
 
-from transformers import BartTokenizer, BartForConditionalGeneration
+from transformers import (BartTokenizer, 
+BartForConditionalGeneration,
+AutoProcessor,
+AutoTokenizer,
+LlavaConfig,
+LlavaForConditionalGeneration)
 from data_raw import ZuCo_dataset
 from model_decoding_raw import BrainTranslator
 from nltk.translate.bleu_score import corpus_bleu
