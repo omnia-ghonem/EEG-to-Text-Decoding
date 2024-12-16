@@ -243,7 +243,7 @@ if __name__ == '__main__':
 
     print()
     
-    tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+    tokenizer = AutoTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf", use_fast=True)
 
     # test dataset
     test_set = ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer, subject = subject_choice, eeg_type = eeg_type_choice, bands = bands_choice, setting = dataset_setting, raweeg=True)
