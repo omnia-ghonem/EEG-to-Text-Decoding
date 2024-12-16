@@ -323,14 +323,7 @@ if __name__ == '__main__':
         dataset_path_task1 = '/kaggle/input/dataset/ZuCo/task1-SR/pickle/task1-SR-dataset_wRaw.pickle'
         with open(dataset_path_task1, 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
-    if 'task2' in task_name:
-        dataset_path_task2 = '/kaggle/input/dataset2/task2-NR-dataset_wRaw.pickle'
-        with open(dataset_path_task2, 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
-    if 'taskNRv2' in task_name:
-        dataset_path_taskNRv2 = '/kaggle/input/dataset3/task2-NR-2.0-dataset_wRaw.pickle'
-        with open(dataset_path_taskNRv2, 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
+
     print()
     """save config"""
 
@@ -338,8 +331,7 @@ if __name__ == '__main__':
         json.dump(args, out_config, indent=4)
 
     if model_name in ['BrainTranslator', 'BrainTranslatorNaive']:
-        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-
+        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
     # train dataset
     train_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
                              eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
@@ -394,9 +386,7 @@ if __name__ == '__main__':
 
     ''' set up model '''
     if model_name == 'BrainTranslator':
-        pretrained = BartForConditionalGeneration.from_pretrained(
-            'facebook/bart-large')
-
+        pretrained = XLNetForConditionalGeneration.from_pretrained('xlnet-base-cased')
         model = model_decoding_raw.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
                                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
