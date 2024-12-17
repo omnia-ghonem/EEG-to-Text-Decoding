@@ -20,7 +20,7 @@ RobertaForSequenceClassification,
 AutoProcessor,
 AutoTokenizer,
 LlavaConfig,
-LlavaForConditionalGeneration)
+LlavaForConditionalGeneration, LlavaTokenizer)
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
@@ -31,7 +31,7 @@ for path in sys.path:
 
 import data_raw
 import config
-import model_decoding_raw
+import model_decoding_raw_try_another_model
 from torch.nn.utils.rnn import pad_sequence
 
 from nltk.translate.bleu_score import corpus_bleu
@@ -339,8 +339,7 @@ if __name__ == '__main__':
     with open(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as out_config:
         json.dump(args, out_config, indent=4)
 
-    if model_name in ['BrainTranslator', 'BrainTranslatorNaive']:
-        tokenizer =  AutoTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf", use_fast=True)
+    tokenizer = LlavaTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf")
     # train dataset
     train_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
                              eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
@@ -395,8 +394,8 @@ if __name__ == '__main__':
 
     ''' set up model '''
     if model_name == 'BrainTranslator':
-        pretrained =  LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map=0, torch_dtype=torch.float16)
-        model = model_decoding_raw.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
+        pretrained = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        model = model_decoding_raw_try_another_model.BrainLLaVATranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
                                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
     model.to(device)
