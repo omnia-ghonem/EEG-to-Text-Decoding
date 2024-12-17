@@ -19,6 +19,7 @@ RobertaTokenizer,
 RobertaForSequenceClassification,
 AutoProcessor,
 AutoTokenizer,
+AutoModelForConditionalGeneration,
 LlavaConfig,
 LlavaForConditionalGeneration)
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
@@ -394,7 +395,7 @@ if __name__ == '__main__':
 
     ''' set up model '''
     if model_name == 'BrainTranslator':
-        pretrained = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        pretrained = AutoModelForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
         model = model_decoding_raw_try_another_model.BrainLLaVATranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
                                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
