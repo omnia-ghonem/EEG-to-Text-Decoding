@@ -24,7 +24,7 @@ LlavaForConditionalGeneration)
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_try_another_model.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 for path in sys.path:
     print(path)
