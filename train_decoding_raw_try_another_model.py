@@ -20,7 +20,7 @@ RobertaForSequenceClassification,
 AutoProcessor,
 AutoTokenizer,
 LlavaConfig,
-LlavaForConditionalGeneration, LlavaTokenizer)
+LlavaForConditionalGeneration)
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
@@ -339,7 +339,7 @@ if __name__ == '__main__':
     with open(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as out_config:
         json.dump(args, out_config, indent=4)
 
-    tokenizer = LlavaTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf")
+    tokenizer = AutoTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf")
     # train dataset
     train_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
                              eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
