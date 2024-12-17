@@ -396,7 +396,7 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained =  LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map=0, torch_dtype=torch.float16)
-        model = model_decoding_raw.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
+        model = model_decoding_raw_try_another_model.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
                                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
     model.to(device)
