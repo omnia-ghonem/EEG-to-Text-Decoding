@@ -396,9 +396,12 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained = XLNetLMHeadModel.from_pretrained('xlnet-base-cased')
-        model = model_decoding_raw_try_another_model.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=768,
-                       additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
-
+        model = model_decoding_raw_try_another_model. BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=768,additional_encoder_nhead=8, 
+                                                                additional_encoder_dim_feedforward=4096,
+                                                                use_lora=True,
+                                                                lora_rank=4,  # Adjust rank as needed
+                                                                lora_alpha=32  # Adjust scaling as needed
+                                                            )
     model.to(device)
 
     ''' training loop '''
@@ -476,9 +479,7 @@ if __name__ == '__main__':
         model.to(device)
 
         ''' set up optimizer and scheduler'''
-        optimizer_step1 = optim.SGD(filter(
-            lambda p: p.requires_grad, model.parameters()), lr=step1_lr, momentum=0.9)
-
+        optimizer_step1 = optim.AdamW(model.get_lora_params(), lr=step1_lr)
         exp_lr_scheduler_step1 = lr_scheduler.CyclicLR(optimizer_step1, 
                      base_lr = step1_lr, # Initial learning rate which is the lower boundary in the cycle for each parameter group
                      max_lr = 5e-3, # Upper learning rate boundaries in the cycle for each parameter group
