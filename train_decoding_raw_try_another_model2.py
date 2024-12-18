@@ -487,8 +487,7 @@ if __name__ == '__main__':
         model.to(device)
 
         ''' set up optimizer and scheduler'''
-        optimizer_step1 = optim.SGD(filter(
-            lambda p: p.requires_grad, model.parameters()), lr=step1_lr, momentum=0.9)
+        optimizer_step1 = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=step1_lr, momentum=0.9)
 
         exp_lr_scheduler_step1 = lr_scheduler.CyclicLR(optimizer_step1, 
                      base_lr = step1_lr, # Initial learning rate which is the lower boundary in the cycle for each parameter group
