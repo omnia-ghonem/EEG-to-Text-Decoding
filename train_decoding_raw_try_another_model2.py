@@ -12,6 +12,8 @@ from glob import glob
 import time
 from tqdm import tqdm
 from peft import LoraConfig, get_peft_model
+import wandb  # Import WandB
+wandb.login(key='9e3444812978fc52bb02968993cfc128af07a1d8')
 
 from transformers import (BartTokenizer, 
 BartForConditionalGeneration, 
