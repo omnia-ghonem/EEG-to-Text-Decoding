@@ -6,14 +6,13 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
-from peft import get_peft_config, get_peft_model, LoraConfig, TaskType
 import pickle
 import json
 from glob import glob
 import time
-import math
 from tqdm import tqdm
-from peft import get_peft_config, get_peft_model, LoraConfig, TaskType, PeftModel
+from peft import LoraConfig, get_peft_model
+
 from transformers import (BartTokenizer, 
 BartForConditionalGeneration, 
 BertTokenizer, BertConfig, 
@@ -27,20 +26,20 @@ XLNetLMHeadModel)
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_try_another_model2.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_try_another_model.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 for path in sys.path:
     print(path)
-import wandb  # Import WandB
+
 import data_raw
 import config
-import model_decoding_raw_try_another_model2
+import model_decoding_raw_try_another_model
 from torch.nn.utils.rnn import pad_sequence
 
 from nltk.translate.bleu_score import corpus_bleu
 from rouge import Rouge
 from bert_score import score
-wandb.login(key='9e3444812978fc52bb02968993cfc128af07a1d8')
+
 import warnings
 warnings.filterwarnings('ignore')
 from transformers import logging
@@ -58,22 +57,6 @@ dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
 SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
             'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
 
-
-def setup_lora_model(model):
-    """Set up LoRA for the model"""
-    peft_config = LoraConfig(
-        task_type=TaskType.SEQ_2_SEQ_LM,
-        inference_mode=False,
-        r=16,  # rank of update matrices
-        lora_alpha=32,  # alpha scaling factor
-        lora_dropout=0.1,
-        target_modules=["q_proj", "v_proj"]  # layers to apply LoRA to
-    )
-    
-    # Convert model to LoRA
-    model = get_peft_model(model, peft_config)
-    model.print_trainable_parameters()
-    return model
 
 def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num_epochs=25, checkpoint_path_best='/kaggle/working/checkpoints/decoding_raw/best/temp_decoding.pt', checkpoint_path_last='/kaggle/working/checkpoints/decoding_raw/last/temp_decoding.pt', stepone=False):
     since = time.time()
@@ -352,6 +335,14 @@ if __name__ == '__main__':
         dataset_path_task1 = '/kaggle/input/dataset/ZuCo/task1-SR/pickle/task1-SR-dataset_wRaw.pickle'
         with open(dataset_path_task1, 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
+    if 'task2' in task_name:
+        dataset_path_task2 = '/kaggle/input/dataset2/task2-NR-dataset_wRaw.pickle'
+        with open(dataset_path_task2, 'rb') as handle:
+            whole_dataset_dicts.append(pickle.load(handle))
+    if 'taskNRv2' in task_name:
+        dataset_path_taskNRv2 = '/kaggle/input/dataset3/task2-NR-2.0-dataset_wRaw.pickle'
+        with open(dataset_path_taskNRv2, 'rb') as handle:
+            whole_dataset_dicts.append(pickle.load(handle))
 
     print()
     """save config"""
@@ -416,12 +407,8 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained = XLNetLMHeadModel.from_pretrained('xlnet-base-cased')
-        model = model_decoding_raw_try_another_model2.BrainTranslator(pretrained, in_feature=1024, 
-                                                                    decoder_embedding_size=768,
-                                                                    additional_encoder_nhead=8, 
-                                                                    additional_encoder_dim_feedforward=4096)
-        
-        model = setup_lora_model(model)
+        model = model_decoding_raw_try_another_model.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=768,
+                       additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
     model.to(device)
 
@@ -441,7 +428,7 @@ if __name__ == '__main__':
 
     if skip_step_one:
         if load_step1_checkpoint:
-            stepone_checkpoint = '/kaggle/input/batch-1-step-2-6/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_skipstep1_b1_3_4_5e-05_5e-05_unique_sent.pt'
+            stepone_checkpoint = '/kaggle/input/xlnet-step-1/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_2_2_5e-05_5e-05_unique_sent.pt'
             print(f'skip step one, load checkpoint: {stepone_checkpoint}')
             model.load_state_dict(torch.load(stepone_checkpoint))
         else:
@@ -494,13 +481,15 @@ if __name__ == '__main__':
         '''step one trainig'''
     ######################################################
         if upload_first_run_step1 :
-            stepone_checkpoint_not_first = '/kaggle/input/notebook6b8b69f067/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b1_8_14_5e-05_5e-05_unique_sent.pt'
+            stepone_checkpoint_not_first = '/kaggle/input/xlnet-step-1/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_2_5e-05_5e-05_unique_sent.pt'
             print(f'not first run for step 1, load checkpoint: {stepone_checkpoint_not_first}')
             model.load_state_dict(torch.load(stepone_checkpoint_not_first))
         model.to(device)
 
         ''' set up optimizer and scheduler'''
-        optimizer_step1 = optim.AdamW(model.get_lora_params(), lr=step1_lr)
+        optimizer_step1 = optim.SGD(filter(
+            lambda p: p.requires_grad, model.parameters()), lr=step1_lr, momentum=0.9)
+
         exp_lr_scheduler_step1 = lr_scheduler.CyclicLR(optimizer_step1, 
                      base_lr = step1_lr, # Initial learning rate which is the lower boundary in the cycle for each parameter group
                      max_lr = 5e-3, # Upper learning rate boundaries in the cycle for each parameter group
