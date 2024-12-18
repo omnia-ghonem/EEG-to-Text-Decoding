@@ -5,6 +5,8 @@ from torch.nn.utils.rnn import pack_padded_sequence
 import torch
 from transformers import LlavaForConditionalGeneration, LlavaProcessor
 
+
+
 def cross_entropy(preds, targets, reduction='none'):
     log_softmax = nn.LogSoftmax(dim=-1)
     loss = (-targets * log_softmax(preds)).sum(1)
@@ -108,7 +110,7 @@ class BrainTranslator(nn.Module):
         brain_embedding = self.brain_projection(brain_embedding)
 
         if stepone == True:
-            words_embedding = self.language_model.model.encoder.embed_tokens(word_contents_batch)
+            words_embedding = self.language_model.encoder.embed_tokens(word_contents_batch)  # Corrected access
             loss = nn.MSELoss()
             return loss(brain_embedding, words_embedding)
         else:
@@ -166,4 +168,5 @@ class FeatureEmbedded(nn.Module):
             sentence_embedding_batch.append(sentence_embedding)
 
         return torch.squeeze(torch.stack(sentence_embedding_batch, 0)).to(device)
+
 
