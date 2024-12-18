@@ -58,7 +58,7 @@ SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW'
             'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
 
 
-def setup_lora_model(model, config):
+def setup_lora_model(model):
     """Set up LoRA for the model"""
     peft_config = LoraConfig(
         task_type=TaskType.SEQ_2_SEQ_LM,
@@ -420,7 +420,7 @@ if __name__ == '__main__':
                                                                     additional_encoder_nhead=8, 
                                                                     additional_encoder_dim_feedforward=4096)
         
-        model = setup_lora_model(model, args)
+        model = setup_lora_model(model)
 
     model.to(device)
 
