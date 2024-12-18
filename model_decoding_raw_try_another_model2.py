@@ -76,7 +76,7 @@ class BrainTranslator(nn.Module):
         
         # XLNet
         self.xlnet = get_peft_model(xlnet, lora_config) # Apply LoRA to XLNet
-
+        self.xlnet.print_trainable_parameters()
     def freeze_pretrained_xlnet(self):
         for name, param in self.named_parameters():
             param.requires_grad = True
