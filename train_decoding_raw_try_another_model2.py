@@ -24,14 +24,14 @@ XLNetLMHeadModel)
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_try_another_model.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_try_another_model2.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 for path in sys.path:
     print(path)
 
 import data_raw
 import config
-import model_decoding_raw_try_another_model
+import model_decoding_raw_try_another_model2
 from torch.nn.utils.rnn import pad_sequence
 
 from nltk.translate.bleu_score import corpus_bleu
@@ -396,7 +396,7 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained = XLNetLMHeadModel.from_pretrained('xlnet-base-cased')
-        model = model_decoding_raw_try_another_model. BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=768,additional_encoder_nhead=8, 
+        model = model_decoding_raw_try_another_model2. BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=768,additional_encoder_nhead=8, 
                                                                 additional_encoder_dim_feedforward=4096,
                                                                 use_lora=True,
                                                                 lora_rank=4,  # Adjust rank as needed
