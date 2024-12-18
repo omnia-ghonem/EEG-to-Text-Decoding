@@ -5,6 +5,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 import torch
 from transformers import LlavaForConditionalGeneration, LlavaProcessor
 from transformers import XLNetTokenizer, XLNetLMHeadModel
+import math
 
 
 
