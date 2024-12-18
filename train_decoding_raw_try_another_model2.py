@@ -415,7 +415,7 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained = XLNetLMHeadModel.from_pretrained('xlnet-base-cased')
-        model = model_decoding_raw_try_another_model.BrainTranslator(pretrained, in_feature=1024, 
+        model = model_decoding_raw_try_another_model2.BrainTranslator(pretrained, in_feature=1024, 
                                                                     decoder_embedding_size=768,
                                                                     additional_encoder_nhead=8, 
                                                                     additional_encoder_dim_feedforward=4096)
