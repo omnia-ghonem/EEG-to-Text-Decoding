@@ -3,7 +3,7 @@ python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_try_another_model
     --two_step \
     --pretrained \
     --not_load_step1_checkpoint \
-    --first_run \
+    --not_first_run \
     --num_epoch_step1 10 \
     --num_epoch_step2 2 \
     -lr1 0.00005 \
