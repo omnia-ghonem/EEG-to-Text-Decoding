@@ -6,11 +6,13 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
+from peft import get_peft_config, get_peft_model, LoraConfig, TaskType
 import pickle
 import json
 from glob import glob
 import time
 from tqdm import tqdm
+from peft import get_peft_config, get_peft_model, LoraConfig, TaskType, PeftModel
 from transformers import (BartTokenizer, 
 BartForConditionalGeneration, 
 BertTokenizer, BertConfig, 
@@ -28,7 +30,7 @@ sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_try_
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 for path in sys.path:
     print(path)
-
+import wandb  # Import WandB
 import data_raw
 import config
 import model_decoding_raw_try_another_model2
@@ -37,7 +39,7 @@ from torch.nn.utils.rnn import pad_sequence
 from nltk.translate.bleu_score import corpus_bleu
 from rouge import Rouge
 from bert_score import score
-
+wandb.login(key='9e3444812978fc52bb02968993cfc128af07a1d8')
 import warnings
 warnings.filterwarnings('ignore')
 from transformers import logging
@@ -54,6 +56,23 @@ dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
 
 SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
             'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
+
+
+def setup_lora_model(model, config):
+    """Set up LoRA for the model"""
+    peft_config = LoraConfig(
+        task_type=TaskType.SEQ_2_SEQ_LM,
+        inference_mode=False,
+        r=16,  # rank of update matrices
+        lora_alpha=32,  # alpha scaling factor
+        lora_dropout=0.1,
+        target_modules=["q_proj", "v_proj"]  # layers to apply LoRA to
+    )
+    
+    # Convert model to LoRA
+    model = get_peft_model(model, peft_config)
+    model.print_trainable_parameters()
+    return model
 
 def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num_epochs=25, checkpoint_path_best='/kaggle/working/checkpoints/decoding_raw/best/temp_decoding.pt', checkpoint_path_last='/kaggle/working/checkpoints/decoding_raw/last/temp_decoding.pt', stepone=False):
     since = time.time()
@@ -396,12 +415,13 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained = XLNetLMHeadModel.from_pretrained('xlnet-base-cased')
-        model = model_decoding_raw_try_another_model2. BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=768,additional_encoder_nhead=8, 
-                                                                additional_encoder_dim_feedforward=4096,
-                                                                use_lora=True,
-                                                                lora_rank=4,  # Adjust rank as needed
-                                                                lora_alpha=32  # Adjust scaling as needed
-                                                            )
+        model = model_decoding_raw_try_another_model.BrainTranslator(pretrained, in_feature=1024, 
+                                                                    decoder_embedding_size=768,
+                                                                    additional_encoder_nhead=8, 
+                                                                    additional_encoder_dim_feedforward=4096)
+        
+        model = setup_lora_model(model, args)
+
     model.to(device)
 
     ''' training loop '''
