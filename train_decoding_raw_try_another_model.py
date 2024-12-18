@@ -486,7 +486,7 @@ if __name__ == '__main__':
 
         ''' set up loss function '''
         criterion = nn.MSELoss()
-        model.freeze_pretrained_bart()
+        model.freeze_pretrained_llava()
 
         print('=== start Step1 training ... ===')
         # print training layers
