@@ -1,8 +1,8 @@
 python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_try_another_model2.py --model_name BrainTranslator \
     --task_name task1_task2_taskNRv2 \
-    --one_step \
+    --two_step \
     --pretrained \
-    --load_step1_checkpoint \
+    --not_load_step1_checkpoint \
     --first_run \
     --num_epoch_step1 2 \
     --num_epoch_step2 2 \
