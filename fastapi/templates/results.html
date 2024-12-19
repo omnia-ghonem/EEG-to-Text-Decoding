@@ -13,7 +13,7 @@
     <div class="rectangle">
         <h3>GPT-4 Refined</h3>
         <p>{{ gpt_refined }}</p>
-        <button onclick="playAudio('{{ gpt_refined }}')" type="button" aria-label="Play BART prediction">
+        <button onclick="playAudio('{{ gpt_refined }}')" type="button" aria-label="Play GPT-4 refined">
             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
         </button>
     </div>
@@ -30,26 +30,27 @@
                 throw new Error("Failed to generate audio");
             }
             
-            // Get the filename from the response
+            // Get the filename from the JSON response
             const data = await response.json();
             const audioFileName = data.filename;
             
             // Create and play audio element
             const audioElement = new Audio(`/static/${audioFileName}`);
-            await audioElement.play();
+            audioElement.play();
         } catch (error) {
             console.error("Error playing audio:", error);
             alert("An error occurred while trying to play the audio.");
         }
     }
 </script>
-    {% if audio_file %}
-    <div class="audio-player">
-        <h3>Audio Player:</h3>
-        <audio controls>
-            <source src="/static/{{ audio_file }}" type="audio/mpeg">
-            Your browser does not support the audio element.
-        </audio>
-    </div>
-    {% endif %}
+
+{% if audio_file %}
+<div class="audio-player">
+    <h3>Audio Player:</h3>
+    <audio controls>
+        <source src="/static/{{ audio_file }}" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+</div>
+{% endif %}
 {% endblock %}
