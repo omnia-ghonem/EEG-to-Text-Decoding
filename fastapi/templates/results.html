@@ -1,16 +1,86 @@
 {% extends "base.html" %}
-
 {% block content %}
 <section>
     <h2>Results</h2>
     <div class="rectangle">
         <h3>BART Prediction</h3>
         <p>{{ bart_prediction }}</p>
+        <button class="tts-button" onclick="playText('{{ bart_prediction }}')" aria-label="Play BART prediction">
+            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+        </button>
     </div>
     <div class="rectangle">
         <h3>GPT-4 Refined</h3>
         <p>{{ gpt_refined }}</p>
+        <button class="tts-button" onclick="playText('{{ gpt_refined }}')" aria-label="Play GPT-4 refined">
+            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+        </button>
     </div>
     <a href="/index">Go back</a>
+
+    <audio id="audio-player" style="display: none;"></audio>
 </section>
-{% endblock %}
+
+<script>
+async function playText(text) {
+    try {
+        const formData = new FormData();
+        formData.append('text', text);
+        
+        const response = await fetch('/text-to-speech', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        const audioPlayer = document.getElementById('audio-player');
+        
+        audioPlayer.src = audioUrl;
+        await audioPlayer.play();
+        
+        // Clean up the object URL after playing
+        audioPlayer.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+        };
+    } catch (error) {
+        console.error('Error playing audio:', error);
+        alert('Error playing audio. Please try again.');
+    }
+}
+</script>
+
+<style>
+.tts-button {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    margin: 5px;
+    transition: transform 0.2s;
+}
+
+.tts-button:hover {
+    transform: scale(1.1);
+}
+
+.tts-button img {
+    width: 24px;
+    height: 24px;
+}
+
+.rectangle {
+    position: relative;
+}
+
+.rectangle .tts-button {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+}
+</style>
+{% endblock %}
