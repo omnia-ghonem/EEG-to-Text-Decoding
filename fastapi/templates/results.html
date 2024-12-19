@@ -17,6 +17,7 @@
             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
         </button>
     </div>
+    
     <a href="/index">Go back</a>
 </section>
 
@@ -42,4 +43,13 @@
         }
     }
 </script>
+    {% if audio_file %}
+    <div class="audio-player">
+        <h3>Audio Player:</h3>
+        <audio controls>
+            <source src="/static/{{ audio_file }}" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+    {% endif %}
 {% endblock %}
