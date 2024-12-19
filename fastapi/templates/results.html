@@ -6,14 +6,14 @@
     <div class="rectangle">
         <h3>BART Prediction</h3>
         <p>{{ bart_prediction }}</p>
-        <button onclick="playAudio('{{ bart_prediction }}')" type="button" aria-label="Play BART prediction">
+        <button onclick="playAudio('{{ bart_prediction|e }}')" type="button" aria-label="Play BART prediction">
             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
         </button>
     </div>
     <div class="rectangle">
         <h3>GPT-4 Refined</h3>
         <p>{{ gpt_refined }}</p>
-        <button onclick="playAudio('{{ gpt_refined }}')" type="button" aria-label="Play BART prediction">
+        <button onclick="playAudio('{{ gpt_refined|e }}')" type="button" aria-label="Play BART prediction">
             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
         </button>
     </div>
@@ -23,22 +23,31 @@
 <script>
     async function playAudio(sentence) {
         try {
-            // Request audio generation
-            const response = await fetch(`/speak?sentence=${encodeURIComponent(sentence)}`);
-            if (!response.ok) {
-                throw new Error("Failed to generate audio");
+            // Validate input
+            if (!sentence || sentence.trim() === "") {
+                throw new Error("No text provided for speech synthesis");
             }
             
-            // Get the filename from the response
+            // Request audio generation
+            const response = await fetch(`/speak?sentence=${encodeURIComponent(sentence.trim())}`);
             const data = await response.json();
-            const audioFileName = data.filename;
+            
+            if (!response.ok) {
+                throw new Error(data.detail || "Failed to generate audio");
+            }
             
             // Create and play audio element
-            const audioElement = new Audio(`/static/${audioFileName}`);
+            const audioElement = new Audio(`/static/${data.filename}`);
+            audioElement.onerror = (e) => {
+                console.error("Audio playback error:", e);
+                throw new Error("Failed to play audio file");
+            };
+            
             await audioElement.play();
+            
         } catch (error) {
             console.error("Error playing audio:", error);
-            alert("An error occurred while trying to play the audio.");
+            alert(error.message || "An error occurred while trying to play the audio.");
         }
     }
 </script>
