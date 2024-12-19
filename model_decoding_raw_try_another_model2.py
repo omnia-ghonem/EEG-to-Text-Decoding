@@ -40,14 +40,21 @@ class ProjectionHead(nn.Module):
 class BrainTranslator(nn.Module):
     def __init__(self, xlnet, in_feature=840, decoder_embedding_size=768, additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
         super(BrainTranslator, self).__init__()
-        lora_config =LoraConfig(task_type="SEQ_2_SEQ_LM",
-                        r=4,
-                        lora_alpha=32,
-                        lora_dropout=0.01,
-                        target_modules=['q_proj','k_proj','v_proj','o_proj','gate_proj','down_proj','up_proj','lm_head'],
-                        inference_mode=False,
-                        bias="none",
-                        modules_to_save=None       )
+        lora_config =LoraConfig(    task_type="SEQ_2_SEQ_LM",
+    r=4,
+    lora_alpha=32,
+    lora_dropout=0.01,
+    target_modules=[
+        "rel_attn.q",
+        "rel_attn.k",
+        "rel_attn.v",
+        "rel_attn.o",
+        "rel_attn.r",
+        "ff.layer_1",
+        "ff.layer_2"
+    ],
+    inference_mode=False,
+    bias="none" )
         # Embedded EEG raw features
         self.hidden_dim = 512
         self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
@@ -75,6 +82,8 @@ class BrainTranslator(nn.Module):
         self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=decoder_embedding_size, dropout=0.2)
         
         # XLNet
+        for name, module in self.xlnet.named_modules():
+             print(name)
         self.xlnet = get_peft_model(xlnet, lora_config) # Apply LoRA to XLNet
         self.xlnet.print_trainable_parameters()
     def freeze_pretrained_xlnet(self):
