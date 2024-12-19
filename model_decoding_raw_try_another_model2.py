@@ -43,7 +43,14 @@ class BrainTranslator(nn.Module):
         lora_config =LoraConfig(task_type="SEQ_2_SEQ_LM",
                         r=4,
                         lora_alpha=32,
-                        lora_dropout=0.01)
+                        lora_dropout=0.01,
+                        target_modules=[
+                            "q", "k", "v", "o",  # attention layers
+                            "wi", "wo",  # FFN layers
+                            "relative_attention_bias" ],
+                        inference_mode=False,
+                        bias="none",
+                        modules_to_save=None       )
         # Embedded EEG raw features
         self.hidden_dim = 512
         self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
