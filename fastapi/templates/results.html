@@ -1,47 +1,34 @@
 {% extends "base.html" %}
-
 {% block content %}
 <section>
     <h2>Results</h2>
     <div class="rectangle">
         <h3>BART Prediction</h3>
         <p>{{ bart_prediction }}</p>
+        <audio id="bart-audio" src="{{ bart_audio_path }}" preload="auto"></audio>
         <button id="play-bart-sound">
-            <img src="static/icons/man_voice_icon.png" alt="Play" width="20">
+            <img src="/static/icons/man_voice_icon.png" alt="Play" width="20">
             Play BART Prediction
         </button>
     </div>
     <div class="rectangle">
         <h3>GPT-4 Refined</h3>
         <p>{{ gpt_refined }}</p>
+        <audio id="gpt-audio" src="{{ gpt_audio_path }}" preload="auto"></audio>
         <button id="play-gpt-sound">
-            <img src="static/icons/man_voice_icon.png" alt="Play" width="20">
+            <img src="/static/icons/man_voice_icon.png" alt="Play" width="20">
             Play GPT-4 Refined
         </button>
     </div>
     <a href="/index">Go back</a>
 </section>
-
 <script>
-    // Function to play the audio for BART automatically when the page loads
-    window.onload = function() {
-        const bartAudio = new Audio('{{ bart_audio_path }}');
-        bartAudio.play();
-
-        const gptAudio = new Audio('{{ gpt_audio_path }}');
-        gptAudio.play();
-    };
-
-    // Play BART audio on button click
     document.getElementById('play-bart-sound').addEventListener('click', function() {
-        const audio = new Audio('{{ bart_audio_path }}');
-        audio.play();
+        document.getElementById('bart-audio').play();
     });
-
-    // Play GPT-4 audio on button click
+    
     document.getElementById('play-gpt-sound').addEventListener('click', function() {
-        const audio = new Audio('{{ gpt_audio_path }}');
-        audio.play();
+        document.getElementById('gpt-audio').play();
     });
 </script>
 {% endblock %}
