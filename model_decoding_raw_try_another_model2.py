@@ -44,10 +44,7 @@ class BrainTranslator(nn.Module):
                         r=4,
                         lora_alpha=32,
                         lora_dropout=0.01,
-                        target_modules=[
-                            "q", "k", "v", "o",  # attention layers
-                            "wi", "wo",  # FFN layers
-                            "relative_attention_bias" ],
+                        target_modules=['q_proj','k_proj','v_proj','o_proj','gate_proj','down_proj','up_proj','lm_head'],
                         inference_mode=False,
                         bias="none",
                         modules_to_save=None       )
