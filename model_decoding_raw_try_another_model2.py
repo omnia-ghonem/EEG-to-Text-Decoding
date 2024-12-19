@@ -82,7 +82,7 @@ class BrainTranslator(nn.Module):
         self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=decoder_embedding_size, dropout=0.2)
         
         # XLNet
-        for name, module in self.xlnet.named_modules():
+        for name, module in xlnet.named_modules():
              print(name)
         self.xlnet = get_peft_model(xlnet, lora_config) # Apply LoRA to XLNet
         self.xlnet.print_trainable_parameters()
