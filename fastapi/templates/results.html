@@ -8,7 +8,7 @@
         <p>{{ bart_prediction }}</p>
         <form action="/speak" method="get">
             <input type="text" name="sentence" value="{{ bart_prediction }}"  required>
-            <button  type="submit" aria-label="Play BART prediction">
+            <button  onclick="playAudio('{{ bart_prediction }}')" type="submit" aria-label="Play BART prediction">
              <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
             </button>
         </form>
@@ -19,7 +19,7 @@
         <p>{{ gpt_refined }}</p>
         <form action="/speak" method="get">
             <input type="text" name="sentence" value="{{ gpt_refined }}"  required>
-            <button  type="submit" aria-label="Play BART prediction">
+            <button onclick="playAudio('{{ gpt_refined }}')" type="submit" aria-label="Play BART prediction">
              <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
             </button>
         </form>
@@ -27,20 +27,28 @@
     </div>
     <a href="/index">Go back</a>
 </section>
+</section>
+
 <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('audio')) {
-        const audioFile = urlParams.get('audio');
-        const container = document.getElementById('audio-container');
-        container.innerHTML = `
-            <div class="file-item">
-                <p>${audioFile}</p>
-                <audio controls>
-                    <source src="/static/${audioFile}" type="audio/mpeg">
-                    Your browser does not support the audio element.
-                </audio>
-            </div>
-        `;
+    // Function to request and play the audio
+    async function playAudio(sentence) {
+        try {
+            // Redirect to the /speak endpoint to generate the audio
+            const response = await fetch(`/speak?sentence=${encodeURIComponent(sentence)}`);
+            if (!response.ok) {
+                throw new Error("Failed to generate audio");
+            }
+
+            // Extract the audio file name from the response
+            const audioFileName = "generated_audio.mp3"; // Adjust this based on the backend response
+            
+            // Dynamically create and play the audio
+            const audioElement = new Audio(`/static/${audioFileName}`);
+            audioElement.play();
+        } catch (error) {
+            console.error("Error playing audio:", error);
+            alert("An error occurred while trying to play the audio.");
+        }
     }
 </script>
 
