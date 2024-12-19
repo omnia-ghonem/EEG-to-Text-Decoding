@@ -80,6 +80,24 @@ button:hover {
     height: 50px;
     animation: spin 1s linear infinite;
 }
+.upload-form {
+    margin-bottom: 20px;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+.audio-player {
+    margin-top: 20px;
+}
+.file-list {
+    margin-top: 20px;
+}
+.file-item {
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 3px;
+}
 
 @keyframes spin {
     0% { transform: rotate(0deg); }
