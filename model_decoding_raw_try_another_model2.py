@@ -40,14 +40,11 @@ class ProjectionHead(nn.Module):
 class BrainTranslator(nn.Module):
     def __init__(self, xlnet, in_feature=840, decoder_embedding_size=768, additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
         super(BrainTranslator, self).__init__()
-        lora_config = LoraConfig(
-            r=8,  # Rank of the low-rank matrices
-            lora_alpha=32,  # Scaling factor for the LoRA matrices
-            target_modules=["query_key_value"], # Target modules for LoRA (adjust as needed)
-            lora_dropout=0.05,  # Dropout for LoRA matrices
-            bias="none",  # Bias for LoRA matrices
-            task_type="CAUSAL_LM" # Task type; adjust as needed
-        )
+        lora_config =LoraConfig(task_type="SEQ_2_SEQ_LM",
+                        r=4,
+                        lora_alpha=32,
+                        lora_dropout=0.01,
+         target_modules=["k","q","v","o"])
         # Embedded EEG raw features
         self.hidden_dim = 512
         self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
