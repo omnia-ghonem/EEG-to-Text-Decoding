@@ -1,127 +1,30 @@
 {% extends "base.html" %}
+
 {% block content %}
 <section>
     <h2>Results</h2>
     <div class="rectangle">
         <h3>BART Prediction</h3>
         <p>{{ bart_prediction }}</p>
-        <button class="tts-button" onclick="playText('{{ bart_prediction | escapejs }}')" aria-label="Play BART prediction">
-            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-        </button>
+        <form action="/speak" method="get">
+            <input type="text" name="sentence" value="{{ bart_prediction }}"  required>
+            <button  type="submit" aria-label="Play BART prediction">
+             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+            </button>
+        </form>
+
     </div>
     <div class="rectangle">
         <h3>GPT-4 Refined</h3>
         <p>{{ gpt_refined }}</p>
-        <button class="tts-button" onclick="playText('{{ gpt_refined | escapejs }}')" aria-label="Play GPT-4 refined">
-            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-        </button>
+        <form action="/speak" method="get">
+            <input type="text" name="sentence" value="{{ gpt_refined }}"  required>
+            <button  type="submit" aria-label="Play BART prediction">
+             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+            </button>
+        </form>
+
     </div>
     <a href="/index">Go back</a>
-
-    <audio id="audio-player" style="display: none;"></audio>
 </section>
-
-<script>
-let isPlaying = false;
-
-async function playText(text) {
-    if (isPlaying) {
-        alert('Audio is already playing. Please wait.');
-        return;
-    }
-
-    if (!text.trim()) {
-        alert('No text provided for playback.');
-        return;
-    }
-
-    try {
-        isPlaying = true;
-
-        const formData = new FormData();
-        formData.append('text', text);
-
-        const response = await fetch('/text-to-speech', {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-
-        const blob = await response.blob();
-        const audioUrl = URL.createObjectURL(blob);
-        const audioPlayer = document.getElementById('audio-player');
-
-        audioPlayer.src = audioUrl;
-        await audioPlayer.play();
-
-        // Clean up and handle the end of playback
-        audioPlayer.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            isPlaying = false;
-        };
-    } catch (error) {
-        console.error('Error playing audio:', error);
-        alert('Error playing audio. Please try again.');
-        isPlaying = false;
-    }
-}
-</script>
-
-<style>
-/* Style for buttons */
-.tts-button {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 5px;
-    margin: 5px;
-    transition: transform 0.2s ease;
-}
-
-.tts-button:hover {
-    transform: scale(1.2);
-}
-
-.tts-button img {
-    width: 28px;
-    height: 28px;
-}
-
-/* Style for result sections */
-.rectangle {
-    position: relative;
-    padding: 15px;
-    margin: 10px 0;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background-color: #f9f9f9;
-    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.rectangle h3 {
-    margin-top: 0;
-}
-
-.rectangle .tts-button {
-    position: absolute;
-    right: 10px;
-    top: 10px;
-}
-
-/* Link styling */
-a {
-    display: inline-block;
-    margin-top: 20px;
-    text-decoration: none;
-    color: #007BFF;
-    font-weight: bold;
-}
-
-a:hover {
-    text-decoration: underline;
-}
-</style>
-{% endblock %}
+{% endblock %}
