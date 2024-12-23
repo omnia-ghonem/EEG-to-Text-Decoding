@@ -3,6 +3,15 @@
 {% block content %}
 <section>
     <h2>Results</h2>
+    {% if audio_file %}
+    <div class="audio-player">
+        <h3>Audio Player:</h3>
+        <audio controls>
+            <source src="/static/{{ audio_file }}" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+    {% endif %}
     <div class="rectangle">
         <h3>BART Prediction</h3>
         <p>{{ bart_prediction }}</p>
