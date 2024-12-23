@@ -1,3 +1,10 @@
+/* General Styles */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -6,6 +13,7 @@ body {
     color: #333;
 }
 
+/* Header */
 header {
     background-color: #005eea;
     color: #fff;
@@ -13,10 +21,12 @@ header {
     text-align: center;
 }
 
+/* Main Content */
 main {
     padding: 2rem;
 }
 
+/* Footer */
 footer {
     background-color: #005eea;
     color: #fff;
@@ -27,6 +37,7 @@ footer {
     width: 100%;
 }
 
+/* Form */
 form {
     margin-top: 1rem;
 }
@@ -34,6 +45,11 @@ form {
 input, button {
     padding: 0.5rem;
     margin: 0.5rem 0;
+    font-size: 1rem;
+}
+
+input:hover {
+    border-color: #005eea;
 }
 
 button {
@@ -41,25 +57,39 @@ button {
     color: white;
     border: none;
     cursor: pointer;
+    transition: background-color 0.3s ease;
 }
 
 button:hover {
-    background-color: #0014ea;
+    background-color: #0033cc;
 }
 
+button:focus, input:focus {
+    outline: 2px solid #005eea;
+    outline-offset: 2px;
+}
+
+/* Rectangle Component */
 .rectangle {
     border: 2px solid #005eea;
     border-radius: 5px;
     padding: 1rem;
     margin: 1rem 0;
     background-color: #e3e3e9;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.rectangle:hover {
+    transform: translateY(-5px);
 }
 
 .rectangle h3 {
     margin: 0;
     color: #005eea;
 }
-/* Loading spinner styles */
+
+/* Loading Spinner Styles */
 #loading {
     position: fixed;
     top: 0;
@@ -74,8 +104,8 @@ button:hover {
 }
 
 #loading .spinner {
-    border: 8px solid #f3f3f3;
-    border-top: 8px solid #3498db;
+    border: 8px solid rgba(0, 0, 0, 0.1); /* Subtle contrast */
+    border-top: 8px solid #005eea; /* Primary theme color */
     border-radius: 50%;
     width: 50px;
     height: 50px;
@@ -83,6 +113,27 @@ button:hover {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    footer {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .rectangle {
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+    }
+
+    button, input {
+        font-size: 0.9rem;
+    }
 }
