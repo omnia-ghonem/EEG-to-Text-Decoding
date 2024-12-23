@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+    <h1>Welcome to the Index Page</h1>
+    <form action="/logout" method="get">
+        <button type="submit">Logout</button>
+    </form>
+    <h2>Upload a Pickle File</h2>
+    <form action="/submit" method="post" enctype="multipart/form-data">
+        <label for="file">Select a pickle file:</label>
+        <input type="file" id="file" name="file" accept=".pkl,.pickle" required>
+        <button type="submit">Submit</button>
+    </form>
+</section>
+{% endblock %}
