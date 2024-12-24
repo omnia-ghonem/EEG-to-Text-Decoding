@@ -1,16 +1,56 @@
+
+
 {% extends "base.html" %}
 
 {% block content %}
 <section>
-    <h2>Sign Up</h2>
-    <form action="/signin" method="post">
-     <label>Email:</label>
-     <input type="email" name="email" required><br><br>
-     <label>Password:</label>
-     <input type="password" name="password" required><br><br>
-     <button type="submit">Sign In</button>
+    <div class="login-box">
+        <!-- Logo Section -->
+        <div class="logo">
+            <img src="static/icons/ejust_logo.png" alt="Ludiflex Logo" class="logo-img">
+        </div>
+        
+        <div class="login-header">
+            <header>Login</header>
+        </div>
+        {% if error %}
+        <div class="error-message">
+            {{ error }}
+        </div>
+        {% endif %}
+        <form id="signin-form" class="input-field" action="/signin" method="post">
+        <div class="input-box">
+            <input type="email" id="login-email"  name="email"  class="input-field" placeholder="Email" required>
+        </div>
+        <div class="input-box">
+            <input type="password" id="login-password" name="password" class="input-field" placeholder="Password" required>
+        </div>
+        <div class="forgot">
+            <section>
+                <input type="checkbox" id="check" name="remember_me" value="true">
+                <label for="check">Remember me</label>
+            </section>
+            <section>
+                <a href="#">Forgot password</a>
+            </section>
+        </div>
+        <div class="input-submit">
+            <button  type="submit" class="submit-btn" id="login-submit">Sign In</button>
+        </div>
+
+        <div class="signup-container" >
+            <p>Don't have an account? <a href="/signup" class="signup-link">Sign Up</a></p>
+        </div>
+ 
     </form>
-    <a href="/">Go back</a>
+
+    </div>
+
 
 </section>
+<script src="{{ url_for('static', path='js/signin.js') }}"></script>
+
 {% endblock %}
+
+
+
