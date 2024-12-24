@@ -13,12 +13,16 @@
     {% if audio_file %}
     <div class="audio-player">
         <h3>Audio Player:</h3>
-        <audio controls>
-            <source src="/static/{{ audio_file }}" type="audio/mpeg">
+        <audio id="invisible-audio" style="display: none;">
+            <source src="{{ url_for('static', filename=audio_file) }}" type="audio/mpeg">
             Your browser does not support the audio element.
         </audio>
+        
     </div>
     {% endif %}
+
+
+
     <div class="rectangle">
         <h3>BART Prediction</h3>
         <p>{{ bart_prediction }}</p>
@@ -46,15 +50,26 @@
 </div>
 
 </section>
+
 <script>
+    // Automatically play the audio if the audio query parameter is present
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('audio')) {
         const audioFile = urlParams.get('audio');
-        const audio = new Audio(`/static/${audioFile}`); // Create a new Audio object
-        audio.play(); // Automatically play the audio
+        const audioElement = document.getElementById('invisible-audio');
+        
+        if (audioElement) {
+            const sourceElement = audioElement.querySelector('source');
+            sourceElement.src = `/static/${audioFile}`;
+            audioElement.load(); // Load the new audio source
+            audioElement.play().catch((error) => {
+                console.error("Audio autoplay failed:", error);
+            });
+        } else {
+            console.error("Invisible audio element not found.");
+        }
     }
 </script>
-
 {% endblock %}
 
 
