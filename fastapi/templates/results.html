@@ -25,12 +25,11 @@
         <form action="/speak" method="get">
             <!-- Hidden input to pass the bart_prediction -->
             <input type="hidden" name="sentence" value="{{ bart_prediction }}">
-            <button type="submit" onclick="playAudio('{{ bart_prediction }}')">
+            <button type="submit">
             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
             </button>
         </form>
 
-        
     </div>
     <div class="rectangle">
         <h3>GPT-4 Refined</h3>
@@ -38,7 +37,7 @@
         <form action="/speak" method="get">
             <!-- Hidden input to pass the bart_prediction -->
             <input type="hidden" name="sentence" value="{{ gpt_refined }}">
-            <button type="submit" onclick="playAudio('{{ gpt_refined }}')">
+            <button type="submit">
             <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
             </button>
         </form>
@@ -47,22 +46,12 @@
 </div>
 
 </section>
-
 <script>
-    async function playAudio(sentence) {
-        try {
-            const response = await fetch(`/speak?sentence=${encodeURIComponent(sentence)}`);
-            if (!response.ok) throw new Error("Failed to generate audio");
-            
-            const data = await response.json();
-            const audioUrl = data.audio_url;
-
-            const audio = new Audio(audioUrl);
-            audio.play();
-        } catch (error) {
-            console.error("Error playing audio:", error);
-            alert("An error occurred while trying to play the audio.");
-        }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('audio')) {
+        const audioFile = urlParams.get('audio');
+        const audio = new Audio(`/static/${audioFile}`); // Create a new Audio object
+        audio.play(); // Automatically play the audio
     }
 </script>
 
