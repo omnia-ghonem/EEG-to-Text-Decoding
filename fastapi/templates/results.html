@@ -1,17 +1,15 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="results-section">
-
+<section>
+    <div class="login-box">
     <!-- Logo Section -->
     <div class="logo">
         <img src="static/icons/ejust_logo.png" alt="Ludiflex Logo" class="logo-img">
     </div>
-
     <div class="login-header">
         <header>Results</header>
     </div>
-
     {% if audio_file %}
     <div class="audio-player">
         <h3>Audio Player:</h3>
@@ -21,115 +19,50 @@
         </audio>
     </div>
     {% endif %}
-
-    <!-- Rectangle for BART Prediction -->
     <div class="rectangle">
         <h3>BART Prediction</h3>
-        <p class="prediction-text">{{ bart_prediction }}</p>
-        <div class="audio-button">
-            <form action="/speak" method="get">
-                <input type="hidden" name="sentence" value="{{ bart_prediction }}">
-                <button type="submit" class="audio-icon">
-                    <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-                </button>
-            </form>
-        </div>
-    </div>
+        <p>{{ bart_prediction }}</p>
+        <form action="/speak" method="get">
+            <!-- Hidden input to pass the bart_prediction -->
+            <input type="hidden" name="sentence" value="{{ bart_prediction }}">
+            <button type="submit">
+            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+            </button>
+        </form>
 
-    <!-- Rectangle for GPT-4 Refined -->
+    </div>
     <div class="rectangle">
         <h3>GPT-4 Refined</h3>
-        <p class="prediction-text">{{ gpt_refined }}</p>
-        <div class="audio-button">
-            <form action="/speak" method="get">
-                <input type="hidden" name="sentence" value="{{ gpt_refined }}">
-                <button type="submit" class="audio-icon">
-                    <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-                </button>
-            </form>
-        </div>
+        <p>{{ gpt_refined }}</p>
+        <form action="/speak" method="get">
+            <!-- Hidden input to pass the bart_prediction -->
+            <input type="hidden" name="sentence" value="{{ gpt_refined }}">
+            <button type="submit">
+            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+            </button>
+        </form>
     </div>
-
-    <a href="/index" class="go-back-link">Go back</a>
+    <a href="/index">Go back</a>
+</div>
 
 </section>
 
-<!-- Custom Styles -->
-<style>
-    .results-section {
-        padding: 20px;
-        font-family: Arial, sans-serif;
-    }
-
-    .rectangle {
-        background-color: #f9f9f9;
-        border: 1px solid #ccc;
-        border-radius: 8px;
-        margin: 20px 0;
-        padding: 20px;
-    }
-
-    .rectangle h3 {
-        margin: 0 0 10px;
-    }
-
-    .prediction-text {
-        font-size: 18px;
-        line-height: 1.5;
-        margin-bottom: 15px;
-    }
-
-    .audio-button {
-        display: flex;
-        justify-content: flex-start;
-    }
-
-    .audio-icon {
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 5px;
-    }
-
-    .audio-icon img {
-        width: 24px;
-        height: 24px;
-    }
-
-    .go-back-link {
-        display: inline-block;
-        margin-top: 20px;
-        color: #007bff;
-        text-decoration: none;
-    }
-
-    .go-back-link:hover {
-        text-decoration: underline;
-    }
-
-    .audio-player {
-        margin-bottom: 20px;
-    }
-
-    .audio-player audio {
-        width: 100%;
-    }
-</style>
-
-<script>
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('audio')) {
-        const audioFile = urlParams.get('audio');
-        const container = document.getElementById('audio-container');
-        container.innerHTML = `
-            <div class="file-item">
-                <p>${audioFile}</p>
-                <audio controls>
-                    <source src="/static/${audioFile}" type="audio/mpeg">
-                    Your browser does not support the audio element.
-                </audio>
-            </div>
-        `;
-    }
-</script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('audio')) {
+            const audioFile = urlParams.get('audio');
+            const container = document.getElementById('audio-container');
+            container.innerHTML = `
+                <div class="file-item">
+                    <p>${audioFile}</p>
+                    <audio controls>
+                        <source src="/static/${audioFile}" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            `;
+        }
+    </script>
 {% endblock %}
+
+
