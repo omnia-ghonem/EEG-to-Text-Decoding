@@ -5,99 +5,280 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>File Upload with FastAPI</title>
     <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    margin: 0;
-                    padding: 0;
-                    background-color: #f4f4f9;
-                    color: #333;
-                }
-                
-                header {
-                    background-color: #005eea;
-                    color: #fff;
-                    padding: 1rem;
-                    text-align: center;
-                }
-                
-                main {
-                    padding: 2rem;
-                }
-                
-                footer {
-                    background-color: #005eea;
-                    color: #fff;
-                    text-align: center;
-                    padding: 1rem;
-                    position: fixed;
-                    bottom: 0;
-                    width: 100%;
-                }
-                
-                form {
-                    margin-top: 1rem;
-                }
-                
-                input, button {
-                    padding: 0.5rem;
-                    margin: 0.5rem 0;
-                }
-                
-                button {
-                    background-color: #0014ea;
-                    color: white;
-                    border: none;
-                    cursor: pointer;
-                }
-                
-                button:hover {
-                    background-color: #0014ea;
-                }
-                
-                .rectangle {
-                    border: 2px solid #005eea;
-                    border-radius: 5px;
-                    padding: 1rem;
-                    margin: 1rem 0;
-                    background-color: #e3e3e9;
-                }
-                
-                .rectangle h3 {
-                    margin: 0;
-                    color: #005eea;
-                }
-                .audio-player {
-                    margin-top: 20px;
-                }
-                /* Loading spinner styles */
-                #loading {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background-color: rgba(255, 255, 255, 0.8);
-                    display: none;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 9999;
-                }
-                
-                #loading .spinner {
-                    border: 8px solid #f3f3f3;
-                    border-top: 8px solid #3498db;
-                    border-radius: 50%;
-                    width: 50px;
-                    height: 50px;
-                    animation: spin 1s linear infinite;
-                }
-                
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500&display=swap');
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #dfdfdf;
+    flex-direction: column; /* Added to center the content vertically */
+}
+
+header {
+    background-color: #dfdfdf;
+    color: #333;
+    padding: 1rem;
+    text-align: center;
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    border-top: 1px solid #ccc; /* Optional: adds subtle separation */
+}
+
+main {
+    padding: 2rem;
+    width: 100%; /* Ensure main content spans the full width */
+    max-width: 440px; /* Adjust to your login box width */
+    margin-top: 70px; /* Adjust for fixed header */
+}
+
+footer {
+    background-color: #dfdfdf;
+    color: #333;
+    text-align: center;
+    padding: 1rem;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    border-top: 1px solid #ccc; /* Optional: adds subtle separation */
+}
+
+.login-box {
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    width: 100%;
+    max-width: 440px;
+    height: auto; /* Allow the height to adjust to content */
+    padding: 30px;
+    background: #dfdfdf;
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.1); /* Slight shadow for separation */
+    border-radius: 10px; /* Rounded corners for better design */
+}
+
+.login-header {
+    text-align: center;
+    margin: 20px 0 40px 0;
+}
+
+.login-header header {
+    color: #333;
+    font-size: 30px;
+    font-weight: 600;
+}
+
+.input-box .input-field {
+    width: 100%;
+    height: 60px;
+    font-size: 17px;
+    padding: 0 25px;
+    margin-bottom: 15px;
+    border-radius: 30px;
+    border: none;
+    box-shadow: 0px 5px 10px 1px rgba(0,0,0, 0.05);
+    outline: none;
+    transition: .3s;
+}
+
+::placeholder {
+    font-weight: 500;
+    color: #222;
+}
+
+.input-field:focus {
+    width: 105%;
+}
+
+.forgot {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 40px;
+}
+
+section {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    color: #555;
+}
+
+#check {
+    margin-right: 10px;
+}
+
+a {
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+section a {
+    color: #555;
+}
 
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+
+.submit-btn {
+    width: 100%;
+    height: 60px;
+    background: #222;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: .3s;
+}
+
+.input-submit label {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    color: #fff;
+    -webkit-transform: translate(-50%, -50%);
+    -ms-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+}
+
+.submit-btn:hover {
+    background: #000;
+    transform: scale(1.05,1);
+}
+
+.sign-up-link {
+    text-align: center;
+    font-size: 15px;
+    margin-top: 20px;
+}
+
+.sign-up-link a {
+    color: #000;
+    font-weight: 600;
+}
+
+/* Logo Styles */
+.logo {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.logo-img {
+    max-width: 300px;
+    height: auto;
+}
+
+.form-field .error {
+    color: rgba(0, 4, 255, 0.58);
+    font-size: 0.9em;
+}
+
+.error-message {
+    color: red;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+.signup-link {
+    font-weight: bold;
+    color: #0066cc;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.signup-link:hover {
+    text-decoration: underline;
+}
+
+.signup-container {
+    text-align: center;
+    margin-top: 15px;
+}
+/* Loading spinner styles */
+#loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+#loading .spinner {
+    border: 8px solid #f3f3f3;
+    border-top: 8px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+
+
+/* Logout button styling */
+.logout-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+.logout-btn {
+    padding: 8px 16px;
+    background: #222;
+    color: #fff;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: .3s;
+}
+
+.logout-btn:hover {
+    background: #000;
+    transform: scale(1.05,1);
+}
+
+/* Modified submit button styling */
+.submit-btn {
+    width: 150px; /* Reduced from 100% */
+    height: 40px; /* Reduced from 60px */
+    background: #222;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: .3s;
+    color: #fff;
+    font-size: 14px;
+    margin-top: 20px; /* Add space between upload and submit */
+}
+
+/* Adjust the file input group spacing */
+.file-input-group {
+    margin-bottom: 20px;
+}
+
+/* Center the submit button */
+.input-submit {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+
+
+
     </style>
 </head>
 <body>
