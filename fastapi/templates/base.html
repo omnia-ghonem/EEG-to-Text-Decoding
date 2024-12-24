@@ -279,13 +279,37 @@ section a {
     border: 2px solid #dfdfdf;
     border-radius: 5px;
     padding: 1rem;
-    margin: 1rem 0;
     background-color: #dfdfdf85;
+    display: flex;
+    justify-content: space-between; /* Aligns content to the sides */
+    align-items: center; /* Vertically center the button */
+    width: 80%; /* Adjust the rectangle size */
+    max-width: 500px;
+    margin: 1rem auto; /* Center the rectangle horizontally */
+    position: relative;
 }
 
 .rectangle h3 {
     margin: 0;
     color: #000000;
+}
+
+.rectangle button {
+    border: none;
+    background: none; /* Removes background color */
+    padding: 0;
+    cursor: pointer;
+    width: 30px; /* Adjust for desired button size */
+    height: 30px; /* Keep a square shape */
+    margin-left: auto; /* Push to the right */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.rectangle button img {
+    width: 100%; /* Scale icon to button size */
+    height: 100%;
 }
 .audio-player {
     margin-top: 20px;
