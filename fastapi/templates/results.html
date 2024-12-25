@@ -35,7 +35,6 @@
         <!-- GPT Refined Rectangle -->
         <div class="rectangle" id="gpt-container">
             <h3>GPT-4 Refined</h3>
-            {% if gpt_refined and gpt_refined != "No refined output file found." %}
                 <p>{{ gpt_refined }}</p>
                 <form action="/speak" method="get" class="audio-form">
                     <input type="hidden" name="sentence" value="{{ gpt_refined }}">
@@ -53,9 +52,7 @@
                         </button>
                     {% endif %}
                 </form>
-            {% else %}
-                <p>No refined text available</p>
-            {% endif %}
+
         </div>
         
         <a href="/index">Go back</a>
