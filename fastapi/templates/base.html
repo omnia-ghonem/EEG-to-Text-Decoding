@@ -281,20 +281,25 @@ section a {
     padding: 1rem;
     background-color: #FFFFFF;
     display: flex;
-    justify-content: space-between; /* Aligns content to the sides */
-    align-items: center; /* Vertically center the button */
-    width: 100%; /* Adjust the rectangle size */
+    flex-direction: column; /* Align items vertically */
+    justify-content: flex-start; /* Align content at the top */
+    align-items: flex-start; /* Align items to the left */
+    width: 100%; /* Ensure it adjusts to available width */
     max-width: 500px;
-    margin: 1rem auto; /* Center the rectangle horizontally */
+    margin: 1rem auto; /* Center horizontally */
     position: relative;
+    overflow-wrap: break-word; /* Ensure text wraps properly */
 }
 
 .rectangle p {
-    font-size: 20px; /* Set font size */
-    font-weight: bold; /* Set font weight to bold */
-    color: #000000;
-    margin-right: 10px; /* Add spacing to separate text from button */
+    font-size: 16px; /* Adjust font size for readability */
+    font-weight: normal; /* Adjust as needed */
+    color: #333333; /* Ensure a subtle contrast */
+    margin: 0.5rem 0; /* Provide spacing above and below text */
+    line-height: 1.5; /* Improve line spacing */
+    word-break: break-word; /* Break long words if necessary */
 }
+
 .rectangle h3 {
     margin: 0;
     color: #000000;
@@ -319,6 +324,16 @@ section a {
 }
 .audio-player {
     margin-top: 20px;
+}
+@media (max-width: 768px) {
+    .rectangle {
+        padding: 0.5rem;
+        max-width: 100%; /* Take full width on smaller screens */
+    }
+
+    .rectangle p {
+        font-size: 14px; /* Slightly reduce font size */
+    }
 }
 
 
