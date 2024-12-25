@@ -15,13 +15,15 @@
             <h3>BART Prediction</h3>
             <p>{{ bart_prediction }}</p>
             {% if bart_audio_file %}
-                <!-- Audio Player -->
-                <div class="audio-container" id="bart-audio-container">
+
+
+                <div class="audio-player" id="bart-audio-container">
                     <audio controls>
-                        <source src="/static/{{ bart_audio_file }}" type="audio/mpeg">
+                        <source src="/static/{{ bart_audio_file  }}" type="audio/mpeg">
                         Your browser does not support the audio element.
                     </audio>
                 </div>
+
             {% else %}
                 <!-- Button -->
                 <form action="/speak" method="get">
