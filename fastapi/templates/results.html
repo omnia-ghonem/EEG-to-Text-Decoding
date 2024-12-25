@@ -1,34 +1,152 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
+    section {
+        width: 100%;
+        max-width: 100%;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .login-box {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .logo {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .logo-img {
+        max-width: 200px;
+        height: auto;
+    }
+
+    .login-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .login-header header {
+        font-size: 24px;
+        font-weight: bold;
+        color: #fff;
+    }
+
     .rectangle {
         background: #1c1c1c;
         border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
+        padding: 30px;
+        margin-bottom: 30px;
+        width: 100%;
+        box-sizing: border-box;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
+
+    .rectangle h3 {
+        color: #fff;
+        margin: 0 0 20px 0;
+        font-size: 20px;
+        border-bottom: 2px solid #333;
+        padding-bottom: 10px;
+    }
+
+    .rectangle p {
+        color: #ddd;
+        line-height: 1.6;
+        margin-bottom: 20px;
+        font-size: 16px;
+    }
+
     .audio-container {
         background: #2a2a2a;
         border-radius: 5px;
-        padding: 10px;
-        margin-top: 10px;
+        padding: 15px;
+        margin-top: 15px;
+        width: 100%;
+        box-sizing: border-box;
     }
+
     .voice-button {
         background: none;
         border: none;
         cursor: pointer;
         padding: 10px;
+        transition: transform 0.2s ease;
     }
+
+    .voice-button:hover {
+        transform: scale(1.1);
+    }
+
     .voice-button img {
-        width: 24px;
-        height: 24px;
+        width: 30px;
+        height: 30px;
     }
+
+    .voice-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     audio {
         width: 100%;
         margin-top: 10px;
+        border-radius: 25px;
     }
+
+    audio::-webkit-media-controls-panel {
+        background-color: #333;
+    }
+
     .hidden {
         display: none;
+    }
+
+    .loading {
+        color: #fff;
+        text-align: center;
+        padding: 15px;
+        font-size: 16px;
+    }
+
+    /* Back button styling */
+    a[href="/index"] {
+        display: inline-block;
+        padding: 10px 20px;
+        background: #2a2a2a;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 5px;
+        margin-top: 20px;
+        transition: background 0.3s ease;
+    }
+
+    a[href="/index"]:hover {
+        background: #333;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .login-box {
+            padding: 10px;
+        }
+        
+        .rectangle {
+            padding: 20px;
+        }
+        
+        .rectangle h3 {
+            font-size: 18px;
+        }
+        
+        .rectangle p {
+            font-size: 14px;
+        }
     }
 </style>
 
@@ -46,22 +164,16 @@
         <div class="rectangle">
             <h3>BART Prediction</h3>
             <p>{{ bart_prediction }}</p>
-            <div id="bart-button-container" {% if bart_audio_file %}class="hidden"{% endif %}>
-                <form action="/speak" method="get" class="voice-form">
-                    <input type="hidden" name="sentence" value="{{ bart_prediction }}">
-                    <input type="hidden" name="source" value="bart">
-                    <button type="submit" class="voice-button">
-                        <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-                    </button>
-                </form>
+            <div id="bart-button-container">
+                <button onclick="generateAudio('{{ bart_prediction }}', 'bart')" class="voice-button">
+                    <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+                </button>
             </div>
-            <div id="bart-audio-container" class="audio-container {% if not bart_audio_file %}hidden{% endif %}">
-                {% if bart_audio_file %}
-                <audio controls>
-                    <source src="/static/{{ bart_audio_file }}" type="audio/mpeg">
-                    Your browser does not support the audio element.
-                </audio>
-                {% endif %}
+            <div id="bart-loading" class="loading hidden">
+                Generating audio...
+            </div>
+            <div id="bart-audio-container" class="audio-container hidden">
+                <!-- Audio player will be inserted here -->
             </div>
         </div>
         
@@ -69,22 +181,16 @@
         <div class="rectangle">
             <h3>GPT-4 Refined</h3>
             <p>{{ gpt_refined }}</p>
-            <div id="gpt-button-container" {% if gpt_audio_file %}class="hidden"{% endif %}>
-                <form action="/speak" method="get" class="voice-form">
-                    <input type="hidden" name="sentence" value="{{ gpt_refined }}">
-                    <input type="hidden" name="source" value="gpt">
-                    <button type="submit" class="voice-button">
-                        <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-                    </button>
-                </form>
+            <div id="gpt-button-container">
+                <button onclick="generateAudio('{{ gpt_refined }}', 'gpt')" class="voice-button">
+                    <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+                </button>
             </div>
-            <div id="gpt-audio-container" class="audio-container {% if not gpt_audio_file %}hidden{% endif %}">
-                {% if gpt_audio_file %}
-                <audio controls>
-                    <source src="/static/{{ gpt_audio_file }}" type="audio/mpeg">
-                    Your browser does not support the audio element.
-                </audio>
-                {% endif %}
+            <div id="gpt-loading" class="loading hidden">
+                Generating audio...
+            </div>
+            <div id="gpt-audio-container" class="audio-container hidden">
+                <!-- Audio player will be inserted here -->
             </div>
         </div>
         
@@ -93,30 +199,66 @@
 </section>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle form submissions
-    document.querySelectorAll('.voice-form').forEach(form => {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const source = this.querySelector('input[name="source"]').value;
-            const buttonContainer = document.getElementById(`${source}-button-container`);
+async function generateAudio(sentence, source) {
+    // Show loading and hide button
+    document.getElementById(`${source}-button-container`).classList.add('hidden');
+    document.getElementById(`${source}-loading`).classList.remove('hidden');
+    
+    try {
+        // Make API call to generate audio
+        const response = await fetch(`/speak?sentence=${encodeURIComponent(sentence)}&source=${source}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // Create audio element
+            const audioHtml = `
+                <audio controls autoplay>
+                    <source src="/static/${data.filename}" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+            `;
+            
+            // Update the container
             const audioContainer = document.getElementById(`${source}-audio-container`);
-            
-            // Show loading state
-            buttonContainer.classList.add('hidden');
-            
-            // Submit the form
-            fetch(this.action + '?' + new URLSearchParams(new FormData(this)))
-                .then(response => response.text())
-                .then(html => {
-                    document.write(html);
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    buttonContainer.classList.remove('hidden');
-                });
-        });
-    });
+            audioContainer.innerHTML = audioHtml;
+            audioContainer.classList.remove('hidden');
+        } else {
+            throw new Error(data.error || 'Failed to generate audio');
+        }
+    } catch (error) {
+        console.error('Error generating audio:', error);
+        // Show error and restore button
+        document.getElementById(`${source}-button-container`).classList.remove('hidden');
+        alert('Failed to generate audio. Please try again.');
+    } finally {
+        // Hide loading
+        document.getElementById(`${source}-loading`).classList.add('hidden');
+    }
+}
+
+// Function to encode template strings properly
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Properly escape the prediction strings
+document.addEventListener('DOMContentLoaded', function() {
+    const bartPrediction = document.querySelector('.rectangle:nth-child(1) p').textContent;
+    const gptPrediction = document.querySelector('.rectangle:nth-child(2) p').textContent;
+    
+    document.querySelector('.rectangle:nth-child(1) button').setAttribute(
+        'onclick', 
+        `generateAudio('${escapeHtml(bartPrediction)}', 'bart')`
+    );
+    document.querySelector('.rectangle:nth-child(2) button').setAttribute(
+        'onclick', 
+        `generateAudio('${escapeHtml(gptPrediction)}', 'gpt')`
+    );
 });
 </script>
 {% endblock %}
