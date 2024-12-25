@@ -199,18 +199,39 @@
 </section>
 
 <script>
+<script>
 async function generateAudio(sentence, source) {
     // Show loading and hide button
-    document.getElementById(`${source}-button-container`).classList.add('hidden');
-    document.getElementById(`${source}-loading`).classList.remove('hidden');
+    const buttonContainer = document.getElementById(`${source}-button-container`);
+    const loadingElement = document.getElementById(`${source}-loading`);
+    const audioContainer = document.getElementById(`${source}-audio-container`);
+    
+    buttonContainer.classList.add('hidden');
+    loadingElement.classList.remove('hidden');
+    audioContainer.classList.add('hidden');
     
     try {
         // Make API call to generate audio
         const response = await fetch(`/speak?sentence=${encodeURIComponent(sentence)}&source=${source}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         
         if (data.success) {
             // Create audio element
+            const audio = new Audio(`/static/${data.filename}`);
+            
+            // Test if audio can be loaded
+            await new Promise((resolve, reject) => {
+                audio.addEventListener('loadeddata', resolve);
+                audio.addEventListener('error', () => reject(new Error('Failed to load audio')));
+                audio.load();
+            });
+            
+            // If audio loaded successfully, create the player
             const audioHtml = `
                 <audio controls autoplay>
                     <source src="/static/${data.filename}" type="audio/mpeg">
@@ -218,8 +239,6 @@ async function generateAudio(sentence, source) {
                 </audio>
             `;
             
-            // Update the container
-            const audioContainer = document.getElementById(`${source}-audio-container`);
             audioContainer.innerHTML = audioHtml;
             audioContainer.classList.remove('hidden');
         } else {
@@ -227,38 +246,28 @@ async function generateAudio(sentence, source) {
         }
     } catch (error) {
         console.error('Error generating audio:', error);
-        // Show error and restore button
-        document.getElementById(`${source}-button-container`).classList.remove('hidden');
-        alert('Failed to generate audio. Please try again.');
+        buttonContainer.classList.remove('hidden');
+        alert(`Failed to generate audio: ${error.message}. Please try again.`);
     } finally {
-        // Hide loading
-        document.getElementById(`${source}-loading`).classList.add('hidden');
+        loadingElement.classList.add('hidden');
     }
 }
 
-// Function to encode template strings properly
-function escapeHtml(unsafe) {
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-// Properly escape the prediction strings
 document.addEventListener('DOMContentLoaded', function() {
-    const bartPrediction = document.querySelector('.rectangle:nth-child(1) p').textContent;
-    const gptPrediction = document.querySelector('.rectangle:nth-child(2) p').textContent;
+    const bartPrediction = document.querySelector('.rectangle:nth-child(1) p').textContent.trim();
+    const gptPrediction = document.querySelector('.rectangle:nth-child(2) p').textContent.trim();
     
-    document.querySelector('.rectangle:nth-child(1) button').setAttribute(
-        'onclick', 
-        `generateAudio('${escapeHtml(bartPrediction)}', 'bart')`
-    );
-    document.querySelector('.rectangle:nth-child(2) button').setAttribute(
-        'onclick', 
-        `generateAudio('${escapeHtml(gptPrediction)}', 'gpt')`
-    );
+    // Add click event listeners instead of inline onclick
+    const bartButton = document.querySelector('.rectangle:nth-child(1) button');
+    const gptButton = document.querySelector('.rectangle:nth-child(2) button');
+    
+    if (bartButton) {
+        bartButton.addEventListener('click', () => generateAudio(bartPrediction, 'bart'));
+    }
+    
+    if (gptButton) {
+        gptButton.addEventListener('click', () => generateAudio(gptPrediction, 'gpt'));
+    }
 });
 </script>
 {% endblock %}
