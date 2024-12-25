@@ -16,7 +16,7 @@
             <p>{{ bart_prediction }}</p>
             {% if bart_audio_file %}
                 <!-- Audio Player -->
-                <div class="audio-container">
+                <div class="audio-container" id="bart-audio-container">
                     <audio controls>
                         <source src="/static/{{ bart_audio_file }}" type="audio/mpeg">
                         Your browser does not support the audio element.
@@ -38,7 +38,7 @@
             <p>{{ gpt_refined }}</p>
             {% if gpt_audio_file %}
                 <!-- Audio Player -->
-                <div class="audio-container">
+                <div class="audio-container" id="gpt-audio-container">
                     <audio controls>
                         <source src="/static/{{ gpt_audio_file }}" type="audio/mpeg">
                         Your browser does not support the audio element.
@@ -57,25 +57,40 @@
 
         <a href="/index">Go back</a>
     </div>
-
 </section>
 
-    <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('audio')) {
-            const audioFile = urlParams.get('audio');
-            const container = document.getElementById('audio-container');
-            container.innerHTML = `
-                <div class="file-item">
-                    <p>${audioFile}</p>
-                    <audio controls>
-                        <source src="/static/${audioFile}" type="audio/mpeg">
-                        Your browser does not support the audio element.
-                    </audio>
-                </div>
-            `;
-        }
-    </script>
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+
+    // Handle BART Audio if available in URL
+    if (urlParams.has('bart_audio')) {
+        const audioFile = urlParams.get('bart_audio');
+        const container = document.getElementById('bart-audio-container');
+        container.innerHTML = `
+            <div class="file-item">
+                <p>${audioFile}</p>
+                <audio controls>
+                    <source src="/static/${audioFile}" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+        `;
+    }
+
+    // Handle GPT-4 Audio if available in URL
+    if (urlParams.has('gpt_audio')) {
+        const audioFile = urlParams.get('gpt_audio');
+        const container = document.getElementById('gpt-audio-container');
+        container.innerHTML = `
+            <div class="file-item">
+                <p>${audioFile}</p>
+                <audio controls>
+                    <source src="/static/${audioFile}" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+        `;
+    }
+</script>
+
 {% endblock %}
-
-
