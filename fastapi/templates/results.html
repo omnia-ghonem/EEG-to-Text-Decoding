@@ -3,47 +3,60 @@
 {% block content %}
 <section>
     <div class="login-box">
-    <!-- Logo Section -->
-    <div class="logo">
-        <img src="static/icons/ejust_logo.png" alt="Ludiflex Logo" class="logo-img">
-    </div>
-    <div class="login-header">
-        <header>Results</header>
-    </div>
-    {% if audio_file %}
-    <div class="audio-player">
-        <h3>Audio Player:</h3>
-        <audio controls>
-            <source src="/static/{{ audio_file }}" type="audio/mpeg">
-            Your browser does not support the audio element.
-        </audio>
-    </div>
-    {% endif %}
-    <div class="rectangle">
-        <h3>BART Prediction</h3>
-        <p>{{ bart_prediction }}</p>
-        <form action="/speak" method="get">
-            <!-- Hidden input to pass the bart_prediction -->
-            <input type="hidden" name="sentence" value="{{ bart_prediction }}">
-            <button type="submit">
-            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-            </button>
-        </form>
+        <!-- Logo Section -->
+        <div class="logo">
+            <img src="static/icons/ejust_logo.png" alt="Ludiflex Logo" class="logo-img">
+        </div>
+        <div class="login-header">
+            <header>Results</header>
+        </div>
 
+        <div class="rectangle">
+            <h3>BART Prediction</h3>
+            <p>{{ bart_prediction }}</p>
+            {% if bart_audio_file %}
+                <!-- Audio Player -->
+                <div class="audio-container">
+                    <audio controls>
+                        <source src="/static/{{ bart_audio_file }}" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            {% else %}
+                <!-- Button -->
+                <form action="/speak" method="get">
+                    <input type="hidden" name="sentence" value="{{ bart_prediction }}">
+                    <button type="submit">
+                        <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+
+        <div class="rectangle">
+            <h3>GPT-4 Refined</h3>
+            <p>{{ gpt_refined }}</p>
+            {% if gpt_audio_file %}
+                <!-- Audio Player -->
+                <div class="audio-container">
+                    <audio controls>
+                        <source src="/static/{{ gpt_audio_file }}" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            {% else %}
+                <!-- Button -->
+                <form action="/speak" method="get">
+                    <input type="hidden" name="sentence" value="{{ gpt_refined }}">
+                    <button type="submit">
+                        <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+
+        <a href="/index">Go back</a>
     </div>
-    <div class="rectangle">
-        <h3>GPT-4 Refined</h3>
-        <p>{{ gpt_refined }}</p>
-        <form action="/speak" method="get">
-            <!-- Hidden input to pass the bart_prediction -->
-            <input type="hidden" name="sentence" value="{{ gpt_refined }}">
-            <button type="submit">
-            <img src="/static/icons/man_voice_icon.png" alt="Play voice" />
-            </button>
-        </form>
-    </div>
-    <a href="/index">Go back</a>
-</div>
 
 </section>
 
