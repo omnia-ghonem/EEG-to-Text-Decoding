@@ -3,8 +3,8 @@ import torch.nn.functional as F
 import torch.utils.data
 from torch.nn.utils.rnn import pack_padded_sequence
 import torch
-from transformers import LlavaForConditionalGeneration, LlavaProcessor
-
+from torch.nn.utils.rnn import pack_padded_sequence
+from transformers import XLNetTokenizer, XLNetLMHeadModel
 
 
 def cross_entropy(preds, targets, reduction='none'):
@@ -14,11 +14,7 @@ def cross_entropy(preds, targets, reduction='none'):
         return loss
     elif reduction == "mean":
         return loss.mean()
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.data
-from torch.nn.utils.rnn import pack_padded_sequence
-from transformers import XLNetTokenizer, XLNetLMHeadModel
+
 
 class ProjectionHead(nn.Module):
     def __init__(
