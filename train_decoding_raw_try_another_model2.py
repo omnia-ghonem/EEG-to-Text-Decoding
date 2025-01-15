@@ -11,31 +11,18 @@ import json
 from glob import glob
 import time
 from tqdm import tqdm
-from peft import LoraConfig, get_peft_model
-import wandb  # Import WandB
-wandb.login(key='9e3444812978fc52bb02968993cfc128af07a1d8')
-
-from transformers import (BartTokenizer, 
-BartForConditionalGeneration, 
-BertTokenizer, BertConfig, 
-BertForSequenceClassification, 
-RobertaTokenizer,
-RobertaForSequenceClassification,
-AutoProcessor,
-AutoTokenizer,
-XLNetTokenizer,
-XLNetLMHeadModel)
+from transformers import BartTokenizer, BartForConditionalGeneration, BertTokenizer, BertConfig, BertForSequenceClassification, RobertaTokenizer, RobertaForSequenceClassification
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_try_another_model2.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data2_raw.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model2_decoding_raw.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 for path in sys.path:
     print(path)
 
-import data_raw
+import data2_raw
 import config
-import model_decoding_raw_try_another_model2
+import model2_decoding_raw
 from torch.nn.utils.rnn import pad_sequence
 
 from nltk.translate.bleu_score import corpus_bleu
@@ -58,7 +45,6 @@ dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
 
 SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
             'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
-
 
 def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num_epochs=25, checkpoint_path_best='/kaggle/working/checkpoints/decoding_raw/best/temp_decoding.pt', checkpoint_path_last='/kaggle/working/checkpoints/decoding_raw/last/temp_decoding.pt', stepone=False):
     since = time.time()
@@ -345,7 +331,6 @@ if __name__ == '__main__':
         dataset_path_taskNRv2 = '/kaggle/input/dataset3/task2-NR-2.0-dataset_wRaw.pickle'
         with open(dataset_path_taskNRv2, 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
-
     print()
     """save config"""
 
@@ -353,15 +338,16 @@ if __name__ == '__main__':
         json.dump(args, out_config, indent=4)
 
     if model_name in ['BrainTranslator', 'BrainTranslatorNaive']:
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
+        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+
     # train dataset
-    train_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
+    train_set = data2_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
                              eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
     # dev dataset
-    dev_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'dev', tokenizer, subject=subject_choice,
+    dev_set = data2_raw.ZuCo_dataset(whole_dataset_dicts, 'dev', tokenizer, subject=subject_choice,
                            eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
     # test dataset
-    test_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer, subject=subject_choice,
+    test_set = data2_raw.ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer, subject=subject_choice,
                             eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
 
     dataset_sizes = {'train': len(train_set), 'dev': len(
@@ -408,9 +394,11 @@ if __name__ == '__main__':
 
     ''' set up model '''
     if model_name == 'BrainTranslator':
-        pretrained = XLNetLMHeadModel.from_pretrained('xlnet-base-cased')
-        model = model_decoding_raw_try_another_model2.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=768,
-                       additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
+        pretrained = BartForConditionalGeneration.from_pretrained(
+            'facebook/bart-large')
+
+        model = model2_decoding_raw.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
+                                additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
     model.to(device)
 
@@ -430,7 +418,7 @@ if __name__ == '__main__':
 
     if skip_step_one:
         if load_step1_checkpoint:
-            stepone_checkpoint = '/kaggle/input/finetune-xlnet-with-lora/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_2_5e-05_5e-05_unique_sent.pt'
+            stepone_checkpoint = '/kaggle/input/train-eeg-to-text/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_25_5e-05_5e-05_unique_sent.pt'
             print(f'skip step one, load checkpoint: {stepone_checkpoint}')
             model.load_state_dict(torch.load(stepone_checkpoint))
         else:
@@ -483,13 +471,14 @@ if __name__ == '__main__':
         '''step one trainig'''
     ######################################################
         if upload_first_run_step1 :
-            stepone_checkpoint_not_first = '/kaggle/input/finetune-xlnet-with-lora/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_2_5e-05_5e-05_unique_sent.pt'
+            stepone_checkpoint_not_first = '/kaggle/input/xlnet-step1-second-time/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_2_5e-05_5e-05_unique_sent.pt'
             print(f'not first run for step 1, load checkpoint: {stepone_checkpoint_not_first}')
             model.load_state_dict(torch.load(stepone_checkpoint_not_first))
         model.to(device)
 
         ''' set up optimizer and scheduler'''
-        optimizer_step1 = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=step1_lr)
+        optimizer_step1 = optim.SGD(filter(
+            lambda p: p.requires_grad, model.parameters()), lr=step1_lr, momentum=0.9)
 
         exp_lr_scheduler_step1 = lr_scheduler.CyclicLR(optimizer_step1, 
                      base_lr = step1_lr, # Initial learning rate which is the lower boundary in the cycle for each parameter group
@@ -498,7 +487,7 @@ if __name__ == '__main__':
 
         ''' set up loss function '''
         criterion = nn.MSELoss()
-        model.freeze_pretrained_xlnet()
+        model.freeze_pretrained_bart()
 
         print('=== start Step1 training ... ===')
         # print training layers
