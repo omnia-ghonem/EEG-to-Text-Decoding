@@ -336,7 +336,12 @@ if __name__ == '__main__':
     # train dataset
     train_set = data2_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
                              eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
-
+    # dev dataset
+    dev_set = data2_raw.ZuCo_dataset(whole_dataset_dicts, 'dev', tokenizer, subject=subject_choice,
+                           eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
+    # test dataset
+    test_set = data2_raw.ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer, subject=subject_choice,
+                            eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
 
     dataset_sizes = {'train': len(train_set), 'dev': len(
         dev_set), 'test': len(test_set)}
