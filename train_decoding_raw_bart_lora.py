@@ -321,7 +321,7 @@ if __name__ == '__main__':
     # Initialize T5 model
     if model_name == 'BrainTranslator':
         pretrained = T5ForConditionalGeneration.from_pretrained('t5-large')
-        model = model_decoding_raw.BrainTranslator(pretrained, in_feature=1024, 
+        model = model_decoding_raw_bart_lora.BrainTranslator(pretrained, in_feature=1024, 
                                                  decoder_embedding_size=1024,
                                                  additional_encoder_nhead=8, 
                                                  additional_encoder_dim_feedforward=4096)
