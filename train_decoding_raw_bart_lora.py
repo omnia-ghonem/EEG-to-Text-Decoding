@@ -369,7 +369,7 @@ if __name__ == '__main__':
     else:
         # Step one training
         if upload_first_run_step1:
-            stepone_checkpoint_not_first = '/kaggle/input/xlnet-step1-second-time/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_2_5e-05_5e-05_unique_sent.pt'
+            stepone_checkpoint_not_first = '/kaggle/input/t5-eeg-to-text-step-1-first/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_1_5e-05_5e-05_unique_sent.pt'
             print(f'not first run for step 1, load checkpoint: {stepone_checkpoint_not_first}')
             model.load_state_dict(torch.load(stepone_checkpoint_not_first))
         
