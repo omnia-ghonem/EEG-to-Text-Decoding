@@ -3,7 +3,7 @@ python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_bart_lora.py --mo
     --two_step \
     --pretrained \
     --not_load_step1_checkpoint \
-    --first_run \
+    --not_first_run \
     --num_epoch_step1 10 \
     --num_epoch_step2 1 \
     -lr1 0.00005 \
