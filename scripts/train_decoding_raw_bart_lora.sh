@@ -1,8 +1,8 @@
 python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_bart_lora.py --model_name BrainTranslator \
     --task_name task1_task2_taskNRv2 \
-    --two_step \
+    --one_step \
     --pretrained \
-    --not_load_step1_checkpoint \
+    --load_step1_checkpoint \
     --not_first_run \
     --num_epoch_step1 10 \
     --num_epoch_step2 1 \
