@@ -8,6 +8,6 @@ python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_bart_lora.py --mo
     --num_epoch_step2 10 \
     -lr1 0.00005 \
     -lr2 0.00005 \
-    -b 20\
+    -b 10\
     -s /kaggle/working/checkpoints/decoding_raw \
     -cuda cuda:0
