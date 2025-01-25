@@ -4,9 +4,9 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence
 
 class Generator(nn.Module):
-    def __init__(self, input_dim=104, latent_dim=64, hidden_dim=256):  # Reduced dimensions
+    def __init__(self, input_dim=104, latent_dim=64, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(latent_dim, hidden_dim, num_layers=1, batch_first=True)  # Removed bidirectional
+        self.lstm = nn.LSTM(latent_dim, hidden_dim, num_layers=1, batch_first=True)
         self.decoder = nn.Sequential(
             nn.Linear(hidden_dim, input_dim),
             nn.Tanh()
@@ -19,12 +19,11 @@ class Generator(nn.Module):
         return self.decoder(output)
 
 class Discriminator(nn.Module):
-    def __init__(self, input_dim=104, hidden_dim=256):  # Reduced dimensions
+    def __init__(self, input_dim=104, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1, batch_first=True)  # Removed bidirectional
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1, batch_first=True)
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim, 1),
-            nn.Sigmoid()
+            nn.Linear(hidden_dim, 1)
         )
         
     def forward(self, x, condition=None):
@@ -34,9 +33,9 @@ class Discriminator(nn.Module):
         return self.classifier(features)
 
 class HybridEncoder(nn.Module):
-    def __init__(self, input_dim=104, hidden_dim=256):  # Reduced dimensions
+    def __init__(self, input_dim=104, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)  # Removed bidirectional
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
         self.norm = nn.LayerNorm(hidden_dim)
         
     def forward(self, x, lengths=None):
@@ -50,25 +49,24 @@ class HybridEncoder(nn.Module):
 
 class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=1024, decoder_embedding_size=1024,
-                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):  # Reduced feedforward dim
+                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
         super().__init__()
         
         self.generator = Generator()
         self.discriminator = Discriminator()
         self.hybrid_encoder = HybridEncoder()
         
-        self.hidden_dim = 256  # Reduced hidden dim
+        self.hidden_dim = 256
         self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
-        self.temporal_align = EnhancedTemporalAlignment(input_dim=in_feature)
-        self.conv1d_point = nn.Conv1d(1, 32, 1, stride=1)  # Reduced channels
+        self.temporal_align = EnhancedTemporalAlignment(input_dim=self.hidden_dim)
+        self.conv1d_point = nn.Conv1d(1, 32, 1, stride=1)
         
-        # Subject mapping (unchanged)
         SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH',
                    'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS',
                    'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
         self.subjects_map = {subj: idx for idx, subj in enumerate(SUBJECTS)}
         self.subject_matrices = nn.ParameterList([
-            nn.Parameter(torch.randn(32, 1)) for _ in range(len(SUBJECTS))  # Reduced matrix size
+            nn.Parameter(torch.randn(32, 1)) for _ in range(len(SUBJECTS))
         ])
         
         self.lstm_decoder = EnhancedLSTMDecoder(input_size=in_feature, hidden_size=decoder_embedding_size)
@@ -81,9 +79,10 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)  # Reduced layers
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)
         self.layernorm_embedding = nn.LayerNorm(in_feature)
         self.bart = bart
+
     def freeze_pretrained_bart(self):
         for name, param in self.named_parameters():
             param.requires_grad = True
@@ -95,26 +94,27 @@ class BrainTranslator(nn.Module):
             param.requires_grad = False
             if ('bart' in name):
                 param.requires_grad = True
-    def generate_synthetic_data(self, batch_size, seq_length, latent_dim=64):  # Reduced latent dim
+
+    def generate_synthetic_data(self, batch_size, seq_length, latent_dim=64):
         z = torch.randn(batch_size, seq_length, latent_dim).to(next(self.parameters()).device)
         return self.generator(z)
 
     def gan_loss(self, real_eeg, batch_size, seq_length):
-            synthetic_eeg = self.generate_synthetic_data(batch_size, seq_length)
-            
-            real_labels = torch.ones(batch_size, seq_length, 1).to(real_eeg.device)
-            fake_labels = torch.zeros(batch_size, seq_length, 1).to(real_eeg.device)
-            
-            d_real = self.discriminator(real_eeg)
-            d_fake = self.discriminator(synthetic_eeg.detach())
-            
-            d_loss = F.binary_cross_entropy_with_logits(d_real, real_labels) + \
-                     F.binary_cross_entropy_with_logits(d_fake, fake_labels)
-            
-            g_fake = self.discriminator(synthetic_eeg)
-            g_loss = F.binary_cross_entropy_with_logits(g_fake, real_labels)
-            
-            return d_loss, g_loss
+        synthetic_eeg = self.generate_synthetic_data(batch_size, seq_length)
+        
+        real_labels = torch.ones(batch_size, seq_length, 1).to(real_eeg.device)
+        fake_labels = torch.zeros(batch_size, seq_length, 1).to(real_eeg.device)
+        
+        d_real = self.discriminator(real_eeg)
+        d_fake = self.discriminator(synthetic_eeg.detach())
+        
+        d_loss = F.binary_cross_entropy_with_logits(d_real, real_labels) + \
+                 F.binary_cross_entropy_with_logits(d_fake, fake_labels)
+        
+        g_fake = self.discriminator(synthetic_eeg)
+        g_loss = F.binary_cross_entropy_with_logits(g_fake, real_labels)
+        
+        return d_loss, g_loss
 
     def forward(self, input_embeddings, input_masks, input_masks_invert,
                 target_ids, lengths_words, word_contents,
@@ -123,7 +123,6 @@ class BrainTranslator(nn.Module):
         batch_size = input_embeddings[0].size(0)
         seq_length = input_embeddings[0].size(1)
         
-        # Clear unnecessary tensors
         torch.cuda.empty_cache()
         
         d_loss, g_loss = self.gan_loss(input_embeddings[0], batch_size, seq_length)
@@ -164,29 +163,27 @@ class BrainTranslator(nn.Module):
             
             return (out.logits, brain_embedding) if features else out.logits
 
-# Other classes remain the same but with reduced dimensions
 class EnhancedTemporalAlignment(nn.Module):
-    def __init__(self, input_dim=512):
+    def __init__(self, input_dim=256):
         super().__init__()
         self.alignment_net = nn.Sequential(
-            nn.Linear(input_dim, input_dim),
+            nn.Linear(input_dim, 1024),
             nn.GELU(),
-            nn.Linear(input_dim, input_dim),
-            nn.LayerNorm(input_dim)
+            nn.Linear(1024, 1024),
+            nn.LayerNorm(1024)
         )
         
     def forward(self, x):
         aligned = self.alignment_net(x)
-        return aligned + x
+        return aligned + torch.zeros_like(aligned)  # Skip connection with zero padding
 
 class EnhancedLSTMDecoder(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers=2):  # Reduced layers
+    def __init__(self, input_size, hidden_size, num_layers=2):
         super().__init__()
         self.lstm = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            bidirectional=False,  # Removed bidirectional
             dropout=0.2 if num_layers > 1 else 0,
             batch_first=True
         )
@@ -203,15 +200,14 @@ class EnhancedLSTMDecoder(nn.Module):
         return self.layer_norm(self.output_projection(outputs))
 
 class FeatureEmbedded(nn.Module):
-    def __init__(self, input_dim=105, hidden_dim=256, num_layers=1):  # Reduced dimensions and layers
+    def __init__(self, input_dim=105, hidden_dim=256, num_layers=1):
         super().__init__()
         self.lstm = nn.LSTM(
             input_size=input_dim,
             hidden_size=hidden_dim,
             num_layers=num_layers,
             batch_first=True,
-            dropout=0.2 if num_layers > 1 else 0,
-            bidirectional=False  # Removed bidirectional
+            dropout=0.2 if num_layers > 1 else 0
         )
         
         for name, param in self.lstm.named_parameters():
