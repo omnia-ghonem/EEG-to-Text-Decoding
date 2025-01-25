@@ -305,7 +305,7 @@ if __name__ == '__main__':
     # Initialize model
     pretrained_bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
     if model_name == 'BrainTranslator':
-        model = model_decoding_raw_enhancement_GANS.EnhancedBrainTranslator(
+        model = model_decoding_raw_enhancement_GANS.BrainTranslator(
             pretrained_bart, 
             in_feature=1024, 
             decoder_embedding_size=1024,
