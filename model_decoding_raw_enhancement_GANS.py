@@ -55,7 +55,7 @@ class HybridEncoder(nn.Module):
         rnn_out, _ = self.rnn(lstm_out)
         return self.norm(rnn_out)
 
-class EnhancedBrainTranslator(nn.Module):
+class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=1024, decoder_embedding_size=1024,
                  additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096):
         super().__init__()
