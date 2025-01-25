@@ -22,12 +22,12 @@ import time
 import sys
 
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_enhancement.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_enhancement2.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 
 import data_raw
 import config
-import model_decoding_raw_enhancement
+import model_decoding_raw_enhancement2
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -312,7 +312,7 @@ if __name__ == '__main__':
     # Initialize model
     pretrained_bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
     if model_name == 'BrainTranslator':
-        model = model_decoding_raw_enhancement.BrainTranslator(
+        model = model_decoding_raw_enhancement2.BrainTranslator(
             pretrained_bart, 
             in_feature=1024, 
             decoder_embedding_size=1024,
