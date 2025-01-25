@@ -10,7 +10,7 @@ from glob import glob
 
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from data_raw import ZuCo_dataset
-from model_decoding_raw import BrainTranslator
+from model_decoding_raw_bart_lora import BrainTranslator
 from nltk.translate.bleu_score import corpus_bleu
 from rouge import Rouge
 from config import get_config
