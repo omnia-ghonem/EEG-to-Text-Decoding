@@ -8,6 +8,6 @@ python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_enhancement.py --
     --num_epoch_step2 5 \
     -lr1 0.00005 \
     -lr2 0.00005 \
-    -b 20\
+    -b 15\
     -s /kaggle/working/checkpoints/decoding_raw \
     -cuda cuda:0
