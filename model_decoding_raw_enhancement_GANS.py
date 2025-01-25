@@ -46,6 +46,8 @@ class HybridEncoder(nn.Module):
         
     def forward(self, x, lengths=None):
         if lengths is not None:
+            # Move lengths to CPU for pack_padded_sequence
+            lengths = lengths.cpu()
             x = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
         lstm_out, _ = self.lstm(x)
         if isinstance(lstm_out, torch.nn.utils.rnn.PackedSequence):
@@ -53,7 +55,7 @@ class HybridEncoder(nn.Module):
         rnn_out, _ = self.rnn(lstm_out)
         return self.norm(rnn_out)
 
-class BrainTranslator(nn.Module):
+class EnhancedBrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=1024, decoder_embedding_size=1024,
                  additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096):
         super().__init__()
@@ -71,7 +73,7 @@ class BrainTranslator(nn.Module):
         self.temporal_align = EnhancedTemporalAlignment(input_dim=in_feature)
         self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
         
-        # Subject mapping (same as original)
+        # Subject mapping
         SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH',
                    'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS',
                    'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
@@ -94,26 +96,14 @@ class BrainTranslator(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=12)
         self.layernorm_embedding = nn.LayerNorm(in_feature)
         self.bart = bart
-    def freeze_pretrained_bart(self):
-        for name, param in self.named_parameters():
-            param.requires_grad = True
-            if ('bart' in name):
-                param.requires_grad = False
 
-    def freeze_pretrained_brain(self):
-        for name, param in self.named_parameters():
-            param.requires_grad = False
-            if ('bart' in name):
-                param.requires_grad = True
     def generate_synthetic_data(self, batch_size, seq_length, latent_dim=128):
         z = torch.randn(batch_size, seq_length, latent_dim).to(next(self.parameters()).device)
         return self.generator(z)
 
     def gan_loss(self, real_eeg, batch_size, seq_length):
-        # Generate synthetic data
         synthetic_eeg = self.generate_synthetic_data(batch_size, seq_length)
         
-        # Discriminator losses
         real_labels = torch.ones(batch_size, seq_length, 1).to(real_eeg.device)
         fake_labels = torch.zeros(batch_size, seq_length, 1).to(real_eeg.device)
         
@@ -123,7 +113,6 @@ class BrainTranslator(nn.Module):
         d_loss = F.binary_cross_entropy(d_real, real_labels) + \
                  F.binary_cross_entropy(d_fake, fake_labels)
         
-        # Generator loss
         g_fake = self.discriminator(synthetic_eeg)
         g_loss = F.binary_cross_entropy(g_fake, real_labels)
         
@@ -180,7 +169,6 @@ class BrainTranslator(nn.Module):
             
             return (out.logits, brain_embedding) if features else out.logits
 
-# Keep original helper classes unchanged
 class EnhancedTemporalAlignment(nn.Module):
     def __init__(self, input_dim=512):
         super().__init__()
@@ -211,6 +199,8 @@ class EnhancedLSTMDecoder(nn.Module):
         
     def forward(self, x, lengths=None):
         if lengths is not None:
+            # Move lengths to CPU for pack_padded_sequence
+            lengths = lengths.cpu()
             x = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
         outputs, (hidden, cell) = self.lstm(x)
         if isinstance(outputs, torch.nn.utils.rnn.PackedSequence):
