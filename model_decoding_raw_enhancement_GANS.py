@@ -96,7 +96,17 @@ class BrainTranslator(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=12)
         self.layernorm_embedding = nn.LayerNorm(in_feature)
         self.bart = bart
+    def freeze_pretrained_bart(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = True
+            if ('bart' in name):
+                param.requires_grad = False
 
+    def freeze_pretrained_brain(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = False
+            if ('bart' in name):
+                param.requires_grad = True
     def generate_synthetic_data(self, batch_size, seq_length, latent_dim=128):
         z = torch.randn(batch_size, seq_length, latent_dim).to(next(self.parameters()).device)
         return self.generator(z)
