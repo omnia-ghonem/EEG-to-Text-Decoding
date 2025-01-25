@@ -131,6 +131,17 @@ class BrainTranslator(nn.Module):
         
         # BART
         self.bart = bart
+    def freeze_pretrained_bart(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = True
+            if ('bart' in name):
+                param.requires_grad = False
+
+    def freeze_pretrained_brain(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = False
+            if ('bart' in name):
+                param.requires_grad = True
         
     def forward(self, input_embeddings, input_masks, input_masks_invert,
                 target_ids, lengths_words, word_contents,
