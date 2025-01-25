@@ -100,8 +100,6 @@ class BrainTranslator(nn.Module):
         return self.generator(z)
 
     def gan_loss(self, real_eeg, batch_size, seq_length):
-        # Implement gradient checkpointing
-        with torch.cuda.amp.autocast():
             synthetic_eeg = self.generate_synthetic_data(batch_size, seq_length)
             
             real_labels = torch.ones(batch_size, seq_length, 1).to(real_eeg.device)
@@ -110,13 +108,13 @@ class BrainTranslator(nn.Module):
             d_real = self.discriminator(real_eeg)
             d_fake = self.discriminator(synthetic_eeg.detach())
             
-            d_loss = F.binary_cross_entropy(d_real, real_labels) + \
-                     F.binary_cross_entropy(d_fake, fake_labels)
+            d_loss = F.binary_cross_entropy_with_logits(d_real, real_labels) + \
+                     F.binary_cross_entropy_with_logits(d_fake, fake_labels)
             
             g_fake = self.discriminator(synthetic_eeg)
-            g_loss = F.binary_cross_entropy(g_fake, real_labels)
-        
-        return d_loss, g_loss
+            g_loss = F.binary_cross_entropy_with_logits(g_fake, real_labels)
+            
+            return d_loss, g_loss
 
     def forward(self, input_embeddings, input_masks, input_masks_invert,
                 target_ids, lengths_words, word_contents,
