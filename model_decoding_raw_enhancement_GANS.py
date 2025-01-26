@@ -118,7 +118,7 @@ class BrainTranslator(nn.Module):
 
     def forward(self, input_embeddings, input_masks, input_masks_invert,
                 target_ids, lengths_words, word_contents,
-                word_contents_attn, stepone, subjects, device, features=False):
+                word_contents_attn, stepone, subjects, device, return_features=False):
         
         batch_size = input_embeddings[0].size(0)
         seq_length = input_embeddings[0].size(1)
@@ -128,10 +128,10 @@ class BrainTranslator(nn.Module):
         d_loss, g_loss = self.gan_loss(input_embeddings[0], batch_size, seq_length)
         encoded_features = self.hybrid_encoder(input_embeddings[0], lengths_words[0])
         
-        features = self.feature_embedded(input_embeddings, lengths_words, device)
-        if len(features.shape) == 2:
-            features = features.unsqueeze(0)
-        aligned_features = self.temporal_align(features)
+        embedded_features = self.feature_embedded(input_embeddings, lengths_words, device)
+        if len(embedded_features.shape) == 2:
+            embedded_features = embedded_features.unsqueeze(0)
+        aligned_features = self.temporal_align(embedded_features)
         
         subject_features = []
         for i, subject in enumerate(subjects):
@@ -161,7 +161,7 @@ class BrainTranslator(nn.Module):
                 return_dict=True
             )
             
-            return (out.logits, brain_embedding) if features else out.logits
+            return (out.logits, brain_embedding) if return_features else out.logits
 
 class EnhancedTemporalAlignment(nn.Module):
     def __init__(self, input_dim=256):
