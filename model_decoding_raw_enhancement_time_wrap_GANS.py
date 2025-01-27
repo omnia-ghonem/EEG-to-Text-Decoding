@@ -3,53 +3,68 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence
 import numpy as np
-from twpca import TWPCA
-from twpca.regularizers import curvature
-import scipy.ndimage.filters
+from scipy.ndimage import gaussian_filter1d
+from scipy.interpolate import interp1d
 
 class TimeWarpingLayer(nn.Module):
     def __init__(self, n_components=5, smooth_sigma=3.0):
         super().__init__()
         self.n_components = n_components
         self.smooth_sigma = smooth_sigma
-        self.warp_regularizer = curvature(scale=0.001, power=1)
-        self.time_regularizer = curvature(scale=1.0, power=2, axis=0)
+        self.warping_net = nn.Sequential(
+            nn.Linear(1, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+            nn.Tanh()
+        )
         
+    def smoothing(self, x):
+        """Apply Gaussian smoothing to the input sequences"""
+        return torch.from_numpy(
+            gaussian_filter1d(x.detach().cpu().numpy(), self.smooth_sigma, axis=1)
+        ).to(x.device)
+    
+    def generate_warping_functions(self, seq_len, batch_size):
+        """Generate monotonic warping functions"""
+        t = torch.linspace(0, 1, seq_len).unsqueeze(0).repeat(batch_size, 1).to(next(self.parameters()).device)
+        warps = self.warping_net(t.unsqueeze(-1))
+        warps = torch.cumsum(F.softplus(warps.squeeze(-1)), dim=1)
+        warps = warps / warps[:, -1:]  # Normalize to [0, 1]
+        return warps
+    
+    def apply_warping(self, x, warps):
+        """Apply warping functions to the sequences"""
+        batch_size, seq_len, n_features = x.shape
+        device = x.device
+        t_orig = torch.linspace(0, 1, seq_len).to(device)
+        
+        warped_sequences = []
+        for i in range(batch_size):
+            sequence = x[i].cpu().numpy()
+            warp = warps[i].cpu().numpy()
+            warped_sequence = []
+            for j in range(n_features):
+                f = interp1d(t_orig.cpu().numpy(), sequence[:, j], kind='linear', fill_value='extrapolate')
+                warped_sequence.append(f(warp))
+            warped_sequences.append(np.stack(warped_sequence, axis=1))
+        
+        return torch.tensor(np.stack(warped_sequences, axis=0), device=device, dtype=x.dtype)
+    
     def forward(self, x):
-        """
-        Apply time warping to input sequences
-        Args:
-            x: Input tensor of shape (batch_size, sequence_length, features)
-        Returns:
-            Tensor of warped sequences
-        """
-        # Convert to numpy for TWPCA
-        x_np = x.detach().cpu().numpy()
-        batch_size, seq_len, n_features = x_np.shape
-        
-        # Smooth the sequences
-        smoothed_data = np.array([
-            scipy.ndimage.filters.gaussian_filter1d(x_np[i], self.smooth_sigma, axis=0)
-            for i in range(batch_size)
-        ])
-        
-        # Fit TWPCA model
-        model = TWPCA(smoothed_data, 
-                     self.n_components,
-                     warp_regularizer=self.warp_regularizer,
-                     time_regularizer=self.time_regularizer).fit(progressbar=False)
-        
-        # Transform the original data
-        warped_data = model.transform(x_np)
-        
-        # Convert back to torch tensor
-        return torch.from_numpy(warped_data).to(x.device)
+        x_smooth = self.smoothing(x)
+        warps = self.generate_warping_functions(x.size(1), x.size(0))
+        warped_data = self.apply_warping(x_smooth, warps)
+        warp_diff = torch.diff(warps, dim=1)
+        smoothness_loss = torch.mean(torch.square(torch.diff(warp_diff, dim=1)))
+        return warped_data, smoothness_loss
 
 class Generator(nn.Module):
     def __init__(self, input_dim=104, latent_dim=64, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(latent_dim, hidden_dim, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(latent_dim, hidden_dim, num_layers=2, batch_first=True, dropout=0.1)
         self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
             nn.Linear(hidden_dim, input_dim),
             nn.Tanh()
         )
@@ -63,8 +78,10 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, input_dim=104, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2, batch_first=True, dropout=0.1)
         self.classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
             nn.Linear(hidden_dim, 1)
         )
         
@@ -77,17 +94,24 @@ class Discriminator(nn.Module):
 class HybridEncoder(nn.Module):
     def __init__(self, input_dim=104, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2, batch_first=True, dropout=0.1)
+        self.attention = nn.MultiheadAttention(hidden_dim, num_heads=8, batch_first=True)
         self.norm = nn.LayerNorm(hidden_dim)
         
     def forward(self, x, lengths=None):
         if lengths is not None:
-            lengths = lengths.cpu()
-            x = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
-        lstm_out, _ = self.lstm(x)
-        if isinstance(lstm_out, torch.nn.utils.rnn.PackedSequence):
-            lstm_out, _ = torch.nn.utils.rnn.pad_packed_sequence(lstm_out, batch_first=True)
-        return self.norm(lstm_out)
+            packed_x = pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
+        else:
+            packed_x = x
+            
+        lstm_out, _ = self.lstm(packed_x)
+        
+        if lengths is not None:
+            lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
+            
+        # Self-attention mechanism
+        attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
+        return self.norm(lstm_out + attn_out)
 
 class EnhancedTemporalAlignment(nn.Module):
     def __init__(self, input_dim=256):
@@ -95,13 +119,13 @@ class EnhancedTemporalAlignment(nn.Module):
         self.alignment_net = nn.Sequential(
             nn.Linear(input_dim, 1024),
             nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(1024, 1024),
             nn.LayerNorm(1024)
         )
         
     def forward(self, x):
-        aligned = self.alignment_net(x)
-        return aligned + torch.zeros_like(aligned)  # Skip connection with zero padding
+        return self.alignment_net(x) + x  # Residual connection
 
 class EnhancedLSTMDecoder(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers=2):
@@ -111,31 +135,35 @@ class EnhancedLSTMDecoder(nn.Module):
             hidden_size=hidden_size,
             num_layers=num_layers,
             dropout=0.2 if num_layers > 1 else 0,
-            batch_first=True
+            batch_first=True,
+            bidirectional=True
         )
-        self.output_projection = nn.Linear(hidden_size, hidden_size)
+        self.output_projection = nn.Linear(hidden_size * 2, hidden_size)
         self.layer_norm = nn.LayerNorm(hidden_size)
         
     def forward(self, x, lengths=None):
         if lengths is not None:
-            lengths = lengths.cpu()
-            x = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
-        outputs, (hidden, cell) = self.lstm(x)
-        if isinstance(outputs, torch.nn.utils.rnn.PackedSequence):
-            outputs, _ = torch.nn.utils.rnn.pad_packed_sequence(outputs, batch_first=True)
+            packed_x = pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
+            outputs, _ = self.lstm(packed_x)
+            outputs, _ = pad_packed_sequence(outputs, batch_first=True)
+        else:
+            outputs, _ = self.lstm(x)
+            
         return self.layer_norm(self.output_projection(outputs))
 
 class FeatureEmbedded(nn.Module):
-    def __init__(self, input_dim=105, hidden_dim=256, num_layers=1):
+    def __init__(self, input_dim=105, hidden_dim=256, num_layers=2):
         super().__init__()
         self.lstm = nn.LSTM(
             input_size=input_dim,
             hidden_size=hidden_dim,
             num_layers=num_layers,
             batch_first=True,
-            dropout=0.2 if num_layers > 1 else 0
+            dropout=0.2 if num_layers > 1 else 0,
+            bidirectional=True
         )
         
+        # Initialize parameters
         for name, param in self.lstm.named_parameters():
             if 'bias' in name:
                 nn.init.constant_(param, 0.0)
@@ -156,33 +184,32 @@ class FeatureEmbedded(nn.Module):
             )
             
             outputs, (hidden, cell) = self.lstm(lstm_input)
-            outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs)
+            outputs, _ = pad_packed_sequence(outputs)
             
-            sentence_embedding = []
-            for i in range(lengths_sentence.shape[0]):
-                sentence_embedding.append(outputs[int(lengths_sentence[i]-1), i, :])
-            sentence_embedding = torch.stack(sentence_embedding, 0)
-            sentence_embeddings.append(sentence_embedding)
+            # Use last hidden states from both directions
+            final_hidden = torch.cat([hidden[-2], hidden[-1]], dim=1)
+            sentence_embeddings.append(final_hidden)
             
-        return torch.squeeze(torch.stack(sentence_embeddings, 0)).to(device)
+        return torch.stack(sentence_embeddings, 0).to(device)
 
 class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=1024, decoder_embedding_size=1024,
                  additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
         super().__init__()
         
-        # Add time warping layer
+        # Core components
         self.time_warping = TimeWarpingLayer(n_components=5)
-        
         self.generator = Generator()
         self.discriminator = Discriminator()
         self.hybrid_encoder = HybridEncoder()
         
+        # Feature processing
         self.hidden_dim = 256
         self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
-        self.temporal_align = EnhancedTemporalAlignment(input_dim=self.hidden_dim)
+        self.temporal_align = EnhancedTemporalAlignment(input_dim=self.hidden_dim * 2)  # *2 for bidirectional
         self.conv1d_point = nn.Conv1d(1, 32, 1, stride=1)
         
+        # Subject-specific processing
         SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH',
                    'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS',
                    'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
@@ -191,9 +218,11 @@ class BrainTranslator(nn.Module):
             nn.Parameter(torch.randn(32, 1)) for _ in range(len(SUBJECTS))
         ])
         
+        # Decoder components
         self.lstm_decoder = EnhancedLSTMDecoder(input_size=in_feature, hidden_size=decoder_embedding_size)
         self.pos_embedding = nn.Parameter(torch.randn(1, 56, in_feature))
         
+        # Transformer encoder
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=in_feature,
             nhead=additional_encoder_nhead,
@@ -204,18 +233,20 @@ class BrainTranslator(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)
         self.layernorm_embedding = nn.LayerNorm(in_feature)
+        
+        # BART model
         self.bart = bart
 
     def freeze_pretrained_bart(self):
         for name, param in self.named_parameters():
             param.requires_grad = True
-            if ('bart' in name):
+            if 'bart' in name:
                 param.requires_grad = False
 
     def freeze_pretrained_brain(self):
         for name, param in self.named_parameters():
             param.requires_grad = False
-            if ('bart' in name):
+            if 'bart' in name:
                 param.requires_grad = True
 
     def generate_synthetic_data(self, batch_size, seq_length, latent_dim=64):
@@ -228,12 +259,13 @@ class BrainTranslator(nn.Module):
         real_labels = torch.ones(batch_size, seq_length, 1).to(real_eeg.device)
         fake_labels = torch.zeros(batch_size, seq_length, 1).to(real_eeg.device)
         
+        # Discriminator loss
         d_real = self.discriminator(real_eeg)
         d_fake = self.discriminator(synthetic_eeg.detach())
-        
         d_loss = F.binary_cross_entropy_with_logits(d_real, real_labels) + \
                  F.binary_cross_entropy_with_logits(d_fake, fake_labels)
         
+        # Generator loss
         g_fake = self.discriminator(synthetic_eeg)
         g_loss = F.binary_cross_entropy_with_logits(g_fake, real_labels)
         
@@ -248,13 +280,15 @@ class BrainTranslator(nn.Module):
         
         torch.cuda.empty_cache()
         
-        # Apply time warping to input embeddings
+        # Apply time warping and process through hybrid encoder
         warped_embeddings = []
+        total_warp_loss = 0
         for emb in input_embeddings:
-            warped_emb = self.time_warping(emb)
+            warped_emb, warp_loss = self.time_warping(emb)
             warped_embeddings.append(warped_emb)
+            total_warp_loss += warp_loss
         
-        # Calculate GAN losses using warped data
+        # Calculate GAN losses
         d_loss, g_loss = self.gan_loss(warped_embeddings[0], batch_size, seq_length)
         
         # Process through hybrid encoder
@@ -270,30 +304,3 @@ class BrainTranslator(nn.Module):
         subject_features = []
         for i, subject in enumerate(subjects):
             tmp = aligned_features[i].unsqueeze(1)
-            tmp = self.conv1d_point(tmp)
-            tmp = torch.swapaxes(tmp, 1, 2)
-            subject_matrix = self.subject_matrices[self.subjects_map[subject]].to(device)
-            tmp = torch.matmul(tmp, subject_matrix).squeeze()
-            subject_features.append(tmp)
-        
-        subject_features = torch.stack(subject_features, 0).to(device) if len(subject_features) > 1 else subject_features[0].unsqueeze(0)
-        
-        # Add positional embeddings and process through transformer
-        brain_embedding = subject_features + self.pos_embedding
-        brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
-        brain_embedding = self.layernorm_embedding(brain_embedding)
-        
-        if stepone:
-            word_embeddings = self.bart.model.encoder.embed_tokens(word_contents)
-            alignment_loss = F.mse_loss(brain_embedding, word_embeddings)
-            return alignment_loss + 0.1 * (d_loss + g_loss)
-        else:
-            decoded_features = self.lstm_decoder(brain_embedding)
-            out = self.bart(
-                inputs_embeds=decoded_features,
-                attention_mask=input_masks,
-                labels=target_ids,
-                return_dict=True
-            )
-            
-            return (out.logits, brain_embedding) if return_features else out.logits
