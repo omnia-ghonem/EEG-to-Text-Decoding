@@ -46,12 +46,19 @@ class AttentionLayer(nn.Module):
         return attn_output
 
 class BrainTranslator(nn.Module):
-    def __init__(self, t5_model, in_feature=840, hidden_dim=512, num_layers=6, nhead=8, dim_feedforward=2048):
-        super(BrainTranslatorEnhanced, self).__init__()
+    def __init__(self, t5_model, in_feature=840, hidden_dim=512, num_layers=6, 
+                 nhead=8, dim_feedforward=2048, decoder_embedding_size=None):
+        # Fix the class name in super().__init__()
+        super(BrainTranslator, self).__init__()
         
         self.eeg_encoder = EnhancedEEGEncoder(in_feature, hidden_dim, num_layers, nhead, dim_feedforward)
         self.attention_layer = AttentionLayer(hidden_dim)
         self.t5_model = t5_model
+        
+        # Add handling for decoder_embedding_size if needed
+        self.decoder_embedding_size = decoder_embedding_size
+        if decoder_embedding_size is not None:
+            self.decoder_projection = nn.Linear(hidden_dim, decoder_embedding_size)
         
     def freeze_pretrained_t5(self):
         for name, param in self.t5_model.named_parameters():
@@ -62,7 +69,9 @@ class BrainTranslator(nn.Module):
             if 't5_model' not in name:
                 param.requires_grad = False
 
-    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch_converted, lenghts_words, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device, features=False):
+    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, 
+                target_ids_batch_converted, lenghts_words, word_contents_batch, 
+                word_contents_attn_batch, stepone, subject_batch, device, features=False):
         eeg_features = self.eeg_encoder(input_embeddings_batch, src_key_padding_mask=input_masks_invert)
         
         if stepone:
@@ -71,7 +80,16 @@ class BrainTranslator(nn.Module):
             return loss(eeg_features, words_embedding)
         else:
             attn_output = self.attention_layer(eeg_features, word_contents_batch)
-            out = self.t5_model(inputs_embeds=attn_output, attention_mask=input_masks_batch, return_dict=True, labels=target_ids_batch_converted)
+            
+            # Project to decoder embedding size if specified
+            if self.decoder_embedding_size is not None:
+                attn_output = self.decoder_projection(attn_output)
+                
+            out = self.t5_model(inputs_embeds=attn_output, 
+                              attention_mask=input_masks_batch, 
+                              return_dict=True, 
+                              labels=target_ids_batch_converted)
+            
             if features:
                 return out.logits, eeg_features
             return out.logits
