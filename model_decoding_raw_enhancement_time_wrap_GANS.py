@@ -300,88 +300,88 @@ class BrainTranslator(nn.Module):
         return d_loss, g_loss
 
     def forward(self, input_embeddings, input_masks, input_masks_invert,
-                target_ids, lengths_words, word_contents,
-                word_contents_attn, stepone, subjects, device, return_features=False):
-        
-        batch_size = input_embeddings[0].size(0)
-        seq_length = input_embeddings[0].size(1)
-        
-        torch.cuda.empty_cache()
-        
-        # Apply time warping and process through hybrid encoder
-        warped_embeddings = []
-        total_warp_loss = 0
-        for emb in input_embeddings:
-            warped_emb, warp_loss = self.time_warping(emb)
-            warped_embeddings.append(warped_emb)
-            total_warp_loss += warp_loss
-        
-        # Calculate GAN losses
-        d_loss, g_loss = self.gan_loss(warped_embeddings[0], batch_size, seq_length)
-        
-        # Process through hybrid encoder
-        encoded_features = self.hybrid_encoder(warped_embeddings[0], lengths_words[0])
-        
-        # Feature embedding and temporal alignment
-        embedded_features = self.feature_embedded(warped_embeddings, lengths_words, device)
-        if len(embedded_features.shape) == 2:
-            embedded_features = embedded_features.unsqueeze(0)
-        aligned_features = self.temporal_align(embedded_features)
-        
-        # Process subject-specific features
-        subject_features = []
-        for i, subject in enumerate(subjects):
-            # Reshape aligned features to work with conv1d
-            tmp = aligned_features[i].unsqueeze(1)  # Add channel dimension
+                    target_ids, lengths_words, word_contents,
+                    word_contents_attn, stepone, subjects, device, return_features=False):
             
-            # Get subject-specific matrix
-            subject_idx = self.subjects_map[subject]
-            subject_matrix = self.subject_matrices[subject_idx]  # Shape: [32, 1]
+            batch_size = input_embeddings[0].size(0)
+            seq_length = input_embeddings[0].size(1)
             
-            # Apply 1D convolution
-            conv_output = self.conv1d_point(tmp)  # Shape: [batch, 32, sequence_length]
+            torch.cuda.empty_cache()
             
-            # Reshape for matrix multiplication
-            # Transpose to get shape [sequence_length, 32]
-            conv_output = conv_output.squeeze(0).transpose(0, 1)
+            # Apply time warping and process through hybrid encoder
+            warped_embeddings = []
+            total_warp_loss = 0
+            for emb in input_embeddings:
+                warped_emb, warp_loss = self.time_warping(emb)
+                warped_embeddings.append(warped_emb)
+                total_warp_loss += warp_loss
             
-            # Matrix multiplication with subject matrix
-            # [sequence_length, 32] x [32, 1] -> [sequence_length, 1]
-            subject_output = torch.matmul(conv_output, subject_matrix)
+            # Calculate GAN losses
+            d_loss, g_loss = self.gan_loss(warped_embeddings[0], batch_size, seq_length)
             
-            # Apply layer normalization
-            subject_output = self.subject_norm(subject_output)
+            # Process through hybrid encoder
+            encoded_features = self.hybrid_encoder(warped_embeddings[0], lengths_words[0])
             
-            subject_features.append(subject_output)
-        
-        # Stack all subject features
-        subject_features = torch.stack(subject_features, dim=0)
-        
-        if stepone:
+            # Feature embedding and temporal alignment
+            embedded_features = self.feature_embedded(warped_embeddings, lengths_words, device)
+            if len(embedded_features.shape) == 2:
+                embedded_features = embedded_features.unsqueeze(0)
+            aligned_features = self.temporal_align(embedded_features)
+            
+            # Process subject-specific features
+            subject_features = []
+            for i, subject in enumerate(subjects):
+                # Reshape aligned features to work with conv1d
+                tmp = aligned_features[i].unsqueeze(1)  # Add channel dimension
+                
+                # Get subject-specific matrix
+                subject_idx = self.subjects_map[subject]
+                subject_matrix = self.subject_matrices[subject_idx]  # Shape: [32, 1]
+                
+                # Apply 1D convolution and reshape
+                conv_output = self.conv1d_point(tmp)  # Shape: [batch, 32, sequence_length]
+                
+                # Reshape and transpose for correct matrix multiplication
+                # Reshape to [32, sequence_length]
+                conv_output = conv_output.squeeze(0)
+                
+                # Ensure dimensions match for matrix multiplication
+                # [32, sequence_length] x [32, 1] -> [sequence_length, 1]
+                subject_output = torch.matmul(conv_output.t(), subject_matrix)
+                
+                # Apply layer normalization
+                subject_output = self.subject_norm(subject_output)
+                
+                subject_features.append(subject_output)
+            
+            # Stack all subject features
+            subject_features = torch.stack(subject_features, dim=0)
+            
+            if stepone:
+                if return_features:
+                    return subject_features
+                return F.mse_loss(subject_features, target_ids)
+            
+            # Add positional embeddings
+            features_with_pos = encoded_features + self.pos_embedding[:, :encoded_features.size(1), :]
+            features_with_pos = self.layernorm_embedding(features_with_pos)
+            
+            # Apply transformer encoder
+            if input_masks is not None:
+                encoded_features = self.encoder(features_with_pos, src_key_padding_mask=input_masks[0])
+            else:
+                encoded_features = self.encoder(features_with_pos)
+            
+            # Process through BART
+            attention_mask = None if input_masks is None else input_masks[0]
+            outputs = self.bart(
+                inputs_embeds=encoded_features,
+                attention_mask=attention_mask,
+                labels=target_ids,
+                output_hidden_states=True,
+                return_dict=True
+            )
+            
             if return_features:
-                return subject_features
-            return F.mse_loss(subject_features, target_ids)
-        
-        # Add positional embeddings
-        features_with_pos = encoded_features + self.pos_embedding[:, :encoded_features.size(1), :]
-        features_with_pos = self.layernorm_embedding(features_with_pos)
-        
-        # Apply transformer encoder
-        if input_masks is not None:
-            encoded_features = self.encoder(features_with_pos, src_key_padding_mask=input_masks[0])
-        else:
-            encoded_features = self.encoder(features_with_pos)
-        
-        # Process through BART
-        attention_mask = None if input_masks is None else input_masks[0]
-        outputs = self.bart(
-            inputs_embeds=encoded_features,
-            attention_mask=attention_mask,
-            labels=target_ids,
-            output_hidden_states=True,
-            return_dict=True
-        )
-        
-        if return_features:
-            return outputs.logits, subject_features, total_warp_loss
-        return outputs.logits
+                return outputs.logits, subject_features, total_warp_loss
+            return outputs.logits
