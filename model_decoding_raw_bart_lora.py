@@ -205,7 +205,7 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=6)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-05)
         
         # Cross-attention between brain features and language model
