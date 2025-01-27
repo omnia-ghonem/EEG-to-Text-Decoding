@@ -237,9 +237,14 @@ class BrainTranslator(nn.Module):
                    'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS',
                    'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
         self.subjects_map = {subj: idx for idx, subj in enumerate(SUBJECTS)}
+        
+        # Initialize subject matrices with proper scaling
         self.subject_matrices = nn.ParameterList([
-            nn.Parameter(torch.randn(32, 1)) for _ in range(len(SUBJECTS))
+            nn.Parameter(torch.randn(32, 1) / np.sqrt(32)) for _ in range(len(SUBJECTS))
         ])
+        
+        # Add layer normalization for subject features
+        self.subject_norm = nn.LayerNorm(1)
         
         # Decoder components
         self.lstm_decoder = EnhancedLSTMDecoder(input_size=in_feature, hidden_size=decoder_embedding_size)
@@ -326,13 +331,30 @@ class BrainTranslator(nn.Module):
         # Process subject-specific features
         subject_features = []
         for i, subject in enumerate(subjects):
-            tmp = aligned_features[i].unsqueeze(1)
+            # Reshape aligned features to work with conv1d
+            tmp = aligned_features[i].unsqueeze(1)  # Add channel dimension
+            
+            # Get subject-specific matrix
             subject_idx = self.subjects_map[subject]
-            subject_matrix = self.subject_matrices[subject_idx]
-            conv_output = self.conv1d_point(tmp)
+            subject_matrix = self.subject_matrices[subject_idx]  # Shape: [32, 1]
+            
+            # Apply 1D convolution
+            conv_output = self.conv1d_point(tmp)  # Shape: [batch, 32, sequence_length]
+            
+            # Reshape for matrix multiplication
+            # Transpose to get shape [sequence_length, 32]
+            conv_output = conv_output.squeeze(0).transpose(0, 1)
+            
+            # Matrix multiplication with subject matrix
+            # [sequence_length, 32] x [32, 1] -> [sequence_length, 1]
             subject_output = torch.matmul(conv_output, subject_matrix)
+            
+            # Apply layer normalization
+            subject_output = self.subject_norm(subject_output)
+            
             subject_features.append(subject_output)
         
+        # Stack all subject features
         subject_features = torch.stack(subject_features, dim=0)
         
         if stepone:
