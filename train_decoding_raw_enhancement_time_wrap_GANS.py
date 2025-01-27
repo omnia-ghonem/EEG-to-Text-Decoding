@@ -100,7 +100,7 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler,
                     target_ids_batch = torch.stack(target_ids, 0).to(device)
                     word_contents_batch = torch.stack(word_contents, 0).to(device)
                     word_contents_attn_batch = torch.stack(word_contents_attn, 0).to(device)
-                    subject_batch = np.array(subject_batch)
+                    subject_batch = list(subject_batch)  # Convert to list for proper handling
 
                     if phase == 'test' and not stepone:
                         target_tokens = tokenizer.convert_ids_to_tokens(
@@ -354,7 +354,8 @@ if __name__ == '__main__':
             optimizer_step2,
             base_lr=5e-7,
             max_lr=5e-5,
-            mode="triangular2"
+            mode="triangular2",
+            cycle_momentum=False
         )
         
         # Combined loss with time warping component
@@ -382,7 +383,8 @@ if __name__ == '__main__':
             optimizer_step1,
             base_lr=step1_lr,
             max_lr=5e-3,
-            mode="triangular2"
+            mode="triangular2",
+            cycle_momentum=False
         )
         
         # MSE loss for step 1
@@ -399,3 +401,4 @@ if __name__ == '__main__':
     for writer in [train_writer, val_writer, dev_writer]:
         writer.flush()
         writer.close()
+
