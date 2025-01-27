@@ -70,6 +70,7 @@ class TimeWarpingLayer(nn.Module):
         smoothness_loss = torch.mean(torch.square(torch.diff(warp_diff, dim=1)))
         return warped_data, smoothness_loss
 
+
 class Generator(nn.Module):
     def __init__(self, input_dim=104, latent_dim=64, hidden_dim=256):
         super().__init__()
@@ -87,6 +88,7 @@ class Generator(nn.Module):
         output, _ = self.lstm(z)
         return self.decoder(output)
 
+
 class Discriminator(nn.Module):
     def __init__(self, input_dim=104, hidden_dim=256):
         super().__init__()
@@ -102,6 +104,7 @@ class Discriminator(nn.Module):
             x = torch.cat([x, condition], dim=-1)
         features, _ = self.lstm(x)
         return self.classifier(features)
+
 
 class HybridEncoder(nn.Module):
     def __init__(self, input_dim=104, hidden_dim=256):
@@ -124,19 +127,25 @@ class HybridEncoder(nn.Module):
         attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
         return self.norm(lstm_out + attn_out)
 
+
 class EnhancedTemporalAlignment(nn.Module):
     def __init__(self, input_dim=256):
         super().__init__()
+        self.input_dim = input_dim
+        # Adjust the network to maintain input dimensions
         self.alignment_net = nn.Sequential(
-            nn.Linear(input_dim, 1024),
+            nn.Linear(input_dim * 2, input_dim * 4),  # *2 because input is bidirectional
             nn.GELU(),
             nn.Dropout(0.1),
-            nn.Linear(1024, 1024),
-            nn.LayerNorm(1024)
+            nn.Linear(input_dim * 4, input_dim * 2),  # Match input dimension
+            nn.LayerNorm(input_dim * 2)
         )
         
     def forward(self, x):
-        return self.alignment_net(x) + x  # Residual connection
+        # Now both tensors will have matching dimensions for the residual connection
+        aligned = self.alignment_net(x)
+        return aligned + x  # Residual connection will work as dimensions match
+
 
 class EnhancedLSTMDecoder(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers=2):
@@ -161,6 +170,7 @@ class EnhancedLSTMDecoder(nn.Module):
             outputs, _ = self.lstm(x)
             
         return self.layer_norm(self.output_projection(outputs))
+
 
 class FeatureEmbedded(nn.Module):
     def __init__(self, input_dim=105, hidden_dim=256, num_layers=2):
@@ -203,6 +213,7 @@ class FeatureEmbedded(nn.Module):
             
         return torch.stack(sentence_embeddings, 0).to(device)
 
+
 class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=1024, decoder_embedding_size=1024,
                  additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
@@ -215,9 +226,10 @@ class BrainTranslator(nn.Module):
         self.hybrid_encoder = HybridEncoder()
         
         # Feature processing
-        self.hidden_dim = 256
+        self.hidden_dim = 256  # Base hidden dimension
         self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
-        self.temporal_align = EnhancedTemporalAlignment(input_dim=self.hidden_dim * 2)  # *2 for bidirectional
+        # Pass the base hidden_dim - the class will handle bidirectional doubling
+        self.temporal_align = EnhancedTemporalAlignment(input_dim=self.hidden_dim)
         self.conv1d_point = nn.Conv1d(1, 32, 1, stride=1)
         
         # Subject-specific processing
