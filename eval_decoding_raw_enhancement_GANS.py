@@ -47,7 +47,10 @@ def chatgpt_refinement(corrupted_text, api_key):
     return output
 
 
-def eval_model(dataloaders, device, tokenizer, criterion, model, api_key='1234', output_all_results_path='/kaggle/working/results_raw/temp.txt'):
+
+
+def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_results_path='/kaggle/working/results_raw/temp.txt'):
+    print("Starting evaluation...")
     model.eval()
     running_loss = 0.0
     
@@ -56,12 +59,15 @@ def eval_model(dataloaders, device, tokenizer, criterion, model, api_key='1234',
     pred_tokens_list = []
     pred_string_list = []
     
+    os.makedirs(os.path.dirname(output_all_results_path), exist_ok=True)
+    
     with open(output_all_results_path, 'w') as f:
         for batch_data in dataloaders['test']:
             _, seq_len, input_masks, input_mask_invert, target_ids, target_mask, \
             sentiment_labels, sent_level_EEG, input_raw_embeddings, input_raw_embeddings_lengths, \
             word_contents, word_contents_attn, subject_batch = batch_data
 
+            # Move tensors to device
             input_embeddings_batch = input_raw_embeddings.float().to(device)
             input_embeddings_lengths_batch = torch.stack([torch.tensor(a.clone().detach()) 
                                                         for a in input_raw_embeddings_lengths], 0).to(device)
@@ -111,21 +117,19 @@ def eval_model(dataloaders, device, tokenizer, criterion, model, api_key='1234',
                 f.write(f'Prediction: {predicted_string}\n')
                 f.write('-' * 50 + '\n\n')
 
+    # Calculate metrics
     epoch_loss = running_loss / len(dataloaders['test'].dataset)
     print(f'Test Loss: {epoch_loss:.4f}')
 
-    # Calculate BLEU scores
     for n in range(1, 5):
         weights = tuple([1.0/n] * n)
         bleu_score = corpus_bleu(target_tokens_list, pred_tokens_list, weights=weights)
         print(f'BLEU-{n}: {bleu_score:.4f}')
 
-    # Calculate ROUGE scores
     rouge = Rouge()
     rouge_scores = rouge.get_scores(pred_string_list, target_string_list, avg=True)
     print("\nROUGE scores:", rouge_scores)
 
-    # Calculate BERTScore
     P, R, F1 = score(pred_string_list, target_string_list, lang='en', 
                      device=device, model_type="bert-large-uncased")
     print(f"\nBERTScore:\nP: {P.mean():.4f}\nR: {R.mean():.4f}\nF1: {F1.mean():.4f}")
@@ -146,10 +150,16 @@ def collate_fn(batch):
            word_contents, word_contents_attn, subject
 
 if __name__ == '__main__':
+    # Get config and setup
     args = config.get_config('eval_decoding')
-    training_config = json.load(open(args['config_path']))
+    print("Loading config...")
+    try:
+        training_config = json.load(open(args['config_path']))
+    except Exception as e:
+        print(f"Error loading config: {e}")
+        exit(1)
     
-    # Setup
+    # Set device and seeds
     seed_val = 312
     np.random.seed(seed_val)
     torch.manual_seed(seed_val)
@@ -158,25 +168,34 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
     
     # Load datasets
+    print("Loading datasets...")
     whole_dataset_dicts = []
-    if 'task1' in training_config['task_name']:
-        with open('/kaggle/input/dataset/ZuCo/task1-SR/pickle/task1-SR-dataset_wRaw.pickle', 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
-    if 'task2' in training_config['task_name']:
-        with open('/kaggle/input/dataset2/task2-NR-dataset_wRaw.pickle', 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
-    if 'taskNRv2' in training_config['task_name']:
-        with open('/kaggle/input/dataset3/task2-NR-2.0-dataset_wRaw.pickle', 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
+    dataset_paths = {
+        'task1': '/kaggle/input/dataset/ZuCo/task1-SR/pickle/task1-SR-dataset_wRaw.pickle',
+        'task2': '/kaggle/input/dataset2/task2-NR-dataset_wRaw.pickle',
+        'taskNRv2': '/kaggle/input/dataset3/task2-NR-2.0-dataset_wRaw.pickle'
+    }
+    
+    for task, path in dataset_paths.items():
+        if task in training_config['task_name']:
+            try:
+                with open(path, 'rb') as handle:
+                    whole_dataset_dicts.append(pickle.load(handle))
+                print(f"Loaded {task} dataset")
+            except Exception as e:
+                print(f"Error loading {task} dataset: {e}")
 
+    print("Initializing tokenizer and model...")
     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
 
-    # Create test dataset
-    test_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer,
-                                    subject=training_config['subjects'],
-                                    eeg_type=training_config['eeg_type'],
-                                    bands=training_config['eeg_bands'],
-                                    setting='unique_sent', raweeg=True)
+    test_set = data_raw.ZuCo_dataset(
+        whole_dataset_dicts, 'test', tokenizer,
+        subject=training_config['subjects'],
+        eeg_type=training_config['eeg_type'],
+        bands=training_config['eeg_bands'],
+        setting='unique_sent', 
+        raweeg=True
+    )
     print(f'Test set size: {len(test_set)}')
 
     dataloaders = {
@@ -193,9 +212,18 @@ if __name__ == '__main__':
         additional_encoder_dim_feedforward=4096
     )
 
+    # Load checkpoint
     print('Loading checkpoint...')
-    model.load_state_dict(torch.load(args['checkpoint_path']))
-    model.to(device)
+    try:
+        checkpoint = torch.load(args['checkpoint_path'], map_location=device)
+        model.load_state_dict(checkpoint)
+        print("Checkpoint loaded successfully")
+    except Exception as e:
+        print(f"Error loading checkpoint: {e}")
+        print(f"Attempted to load from: {args['checkpoint_path']}")
+        exit(1)
+
+    model = model.to(device)
     criterion = nn.CrossEntropyLoss()
 
     # Evaluate
@@ -203,4 +231,4 @@ if __name__ == '__main__':
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     print(f'Saving results to: {output_path}')
     
-    eval_model(dataloaders, device, tokenizer, criterion, model, args['api_key'], output_path)
+    eval_model(dataloaders, device, tokenizer, criterion, model, output_path)
