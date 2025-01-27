@@ -6,6 +6,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
 
+
 class TimeWarpingLayer(nn.Module):
     def __init__(self, n_components=5, smooth_sigma=3.0):
         super().__init__()
@@ -38,17 +39,28 @@ class TimeWarpingLayer(nn.Module):
         device = x.device
         t_orig = torch.linspace(0, 1, seq_len).to(device)
         
+        # Detach tensors before converting to numpy
+        x_np = x.detach().cpu().numpy()
+        warps_np = warps.detach().cpu().numpy()
+        t_orig_np = t_orig.cpu().numpy()
+        
         warped_sequences = []
         for i in range(batch_size):
-            sequence = x[i].cpu().numpy()
-            warp = warps[i].cpu().numpy()
+            sequence = x_np[i]
+            warp = warps_np[i]
             warped_sequence = []
+            
             for j in range(n_features):
-                f = interp1d(t_orig.cpu().numpy(), sequence[:, j], kind='linear', fill_value='extrapolate')
+                f = interp1d(t_orig_np, sequence[:, j], kind='linear', fill_value='extrapolate')
                 warped_sequence.append(f(warp))
             warped_sequences.append(np.stack(warped_sequence, axis=1))
         
-        return torch.tensor(np.stack(warped_sequences, axis=0), device=device, dtype=x.dtype)
+        # Convert back to tensor and maintain gradients if needed
+        warped_tensor = torch.tensor(np.stack(warped_sequences, axis=0), 
+                                   device=device, 
+                                   dtype=x.dtype,
+                                   requires_grad=x.requires_grad)
+        return warped_tensor
     
     def forward(self, x):
         x_smooth = self.smoothing(x)
