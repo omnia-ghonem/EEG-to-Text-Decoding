@@ -49,7 +49,7 @@ class HybridEncoder(nn.Module):
 
 class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=1024, decoder_embedding_size=1024,
-                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
+                 additional_encoder_nhead=6, additional_encoder_dim_feedforward=2048):
         super().__init__()
         
         self.generator = Generator()
@@ -79,7 +79,7 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=4)
         self.layernorm_embedding = nn.LayerNorm(in_feature)
         self.bart = bart
 
