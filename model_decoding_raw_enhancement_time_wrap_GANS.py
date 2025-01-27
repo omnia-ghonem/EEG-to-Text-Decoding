@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pack_padded_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
@@ -112,14 +112,13 @@ class HybridEncoder(nn.Module):
         
     def forward(self, x, lengths=None):
         if lengths is not None:
+            # Pack the sequence for LSTM processing
             packed_x = pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
+            lstm_out, _ = self.lstm(packed_x)
+            # Unpack the sequence
+            lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
         else:
-            packed_x = x
-            
-        lstm_out, _ = self.lstm(packed_x)
-        
-        if lengths is not None:
-            lstm_out, _ = pack_padded_sequence(lstm_out, batch_first=True)
+            lstm_out, _ = self.lstm(x)
             
         # Self-attention mechanism
         attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
@@ -157,7 +156,7 @@ class EnhancedLSTMDecoder(nn.Module):
         if lengths is not None:
             packed_x = pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
             outputs, _ = self.lstm(packed_x)
-            outputs, _ = pack_padded_sequence(outputs, batch_first=True)
+            outputs, _ = pad_packed_sequence(outputs, batch_first=True)
         else:
             outputs, _ = self.lstm(x)
             
@@ -196,7 +195,7 @@ class FeatureEmbedded(nn.Module):
             )
             
             outputs, (hidden, cell) = self.lstm(lstm_input)
-            outputs, _ = pack_padded_sequence(outputs)
+            outputs, _ = pad_packed_sequence(outputs, batch_first=True)
             
             # Use last hidden states from both directions
             final_hidden = torch.cat([hidden[-2], hidden[-1]], dim=1)
@@ -316,3 +315,39 @@ class BrainTranslator(nn.Module):
         subject_features = []
         for i, subject in enumerate(subjects):
             tmp = aligned_features[i].unsqueeze(1)
+            subject_idx = self.subjects_map[subject]
+            subject_matrix = self.subject_matrices[subject_idx]
+            conv_output = self.conv1d_point(tmp)
+            subject_output = torch.matmul(conv_output, subject_matrix)
+            subject_features.append(subject_output)
+        
+        subject_features = torch.stack(subject_features, dim=0)
+        
+        if stepone:
+            if return_features:
+                return subject_features
+            return F.mse_loss(subject_features, target_ids)
+        
+        # Add positional embeddings
+        features_with_pos = encoded_features + self.pos_embedding[:, :encoded_features.size(1), :]
+        features_with_pos = self.layernorm_embedding(features_with_pos)
+        
+        # Apply transformer encoder
+        if input_masks is not None:
+            encoded_features = self.encoder(features_with_pos, src_key_padding_mask=input_masks[0])
+        else:
+            encoded_features = self.encoder(features_with_pos)
+        
+        # Process through BART
+        attention_mask = None if input_masks is None else input_masks[0]
+        outputs = self.bart(
+            inputs_embeds=encoded_features,
+            attention_mask=attention_mask,
+            labels=target_ids,
+            output_hidden_states=True,
+            return_dict=True
+        )
+        
+        if return_features:
+            return outputs.logits, subject_features, total_warp_loss
+        return outputs.logits
