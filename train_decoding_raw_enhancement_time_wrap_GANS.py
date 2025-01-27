@@ -23,7 +23,7 @@ sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 
 import data_raw
 import config
-import model_decoding_raw_enhancement_GANS
+import model_decoding_raw_enhancement_time_wrap_GANS
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -318,7 +318,7 @@ if __name__ == '__main__':
     # Initialize model with pretrained BART
     pretrained_bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
     if model_name == 'BrainTranslator':
-        model = model_decoding_raw_enhancement_GANS.BrainTranslator(
+        model = model_decoding_raw_enhancement_time_wrap_GANS.BrainTranslator(
             pretrained_bart, 
             in_feature=1024, 
             decoder_embedding_size=1024,
