@@ -147,7 +147,7 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=3)
         self.layernorm_embedding = nn.LayerNorm(in_feature)
         self.bart = bart
 
