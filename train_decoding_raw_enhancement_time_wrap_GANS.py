@@ -17,14 +17,13 @@ import torch.nn.functional as F
 import time
 import sys
 
-# Import local modules
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_enhancement_time_wrap_GANS.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_enhancement_GANS.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 
 import data_raw
 import config
-import model_decoding_raw_enhancement_time_wrap_GANS
+import model_decoding_raw_enhancement_GANS
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -32,36 +31,28 @@ from transformers import logging
 logging.set_verbosity_error()
 torch.autograd.set_detect_anomaly(True)
 
-# Setup tensorboard writers
 LOG_DIR = "runs_h"
 train_writer = SummaryWriter(os.path.join(LOG_DIR, "train"))
 val_writer = SummaryWriter(os.path.join(LOG_DIR, "train_full"))
 dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
 
-SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH',
-            'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS',
+SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
+            'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 
             'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
 
 class CombinedLoss(nn.Module):
-    def __init__(self, alpha=0.7, beta=0.1):
+    def __init__(self, alpha=0.7):
         super().__init__()
         self.alpha = alpha
-        self.beta = beta
         self.ce_loss = nn.CrossEntropyLoss()
         self.mse_loss = nn.MSELoss()
         
-    def forward(self, pred, target, temporal_pred=None, temporal_target=None, warp_loss=None):
+    def forward(self, pred, target, temporal_pred=None, temporal_target=None):
         ce = self.ce_loss(pred, target)
-        total_loss = self.alpha * ce
-        
         if temporal_pred is not None and temporal_target is not None:
             mse = self.mse_loss(temporal_pred, temporal_target)
-            total_loss += (1 - self.alpha) * mse
-            
-        if warp_loss is not None:
-            total_loss += self.beta * warp_loss
-            
-        return total_loss
+            return self.alpha * ce + (1 - self.alpha) * mse
+        return ce
 
 def train_model(dataloaders, device, model, criterion, optimizer, scheduler, 
                 num_epochs=25, checkpoint_path_best='best.pt', 
@@ -100,7 +91,7 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler,
                     target_ids_batch = torch.stack(target_ids, 0).to(device)
                     word_contents_batch = torch.stack(word_contents, 0).to(device)
                     word_contents_attn_batch = torch.stack(word_contents_attn, 0).to(device)
-                    subject_batch = list(subject_batch)  # Convert to list for proper handling
+                    subject_batch = np.array(subject_batch)
 
                     if phase == 'test' and not stepone:
                         target_tokens = tokenizer.convert_ids_to_tokens(
@@ -123,20 +114,12 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler,
                             loss = outputs
                         else:
                             temporal_pred, temporal_target = None, None
-                            warp_loss = None
-                            
                             if isinstance(outputs, tuple):
-                                if len(outputs) == 2:
-                                    logits, temporal_features = outputs
-                                    temporal_pred = temporal_features
-                                    temporal_target = model.temporal_align(input_embeddings_batch)
-                                elif len(outputs) == 3:
-                                    logits, temporal_features, warp_loss = outputs
-                                    temporal_pred = temporal_features
-                                    temporal_target = model.temporal_align(input_embeddings_batch)
-                                
+                                logits, temporal_features = outputs
+                                temporal_pred = temporal_features
+                                temporal_target = model.temporal_align(input_embeddings_batch)
                                 loss = criterion(logits.permute(0, 2, 1), target_ids_batch.long(),
-                                              temporal_pred, temporal_target, warp_loss)
+                                              temporal_pred, temporal_target)
                             else:
                                 loss = criterion(outputs.permute(0, 2, 1), target_ids_batch.long())
 
@@ -266,12 +249,14 @@ if __name__ == '__main__':
 
     # Load datasets
     whole_dataset_dicts = []
+    '''
     if 'task1' in task_name:
         with open('/kaggle/input/dataset/ZuCo/task1-SR/pickle/task1-SR-dataset_wRaw.pickle', 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
     if 'task2' in task_name:
         with open('/kaggle/input/dataset2/task2-NR-dataset_wRaw.pickle', 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
+    '''
     if 'taskNRv2' in task_name:
         with open('/kaggle/input/dataset3/task2-NR-2.0-dataset_wRaw.pickle', 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
@@ -294,7 +279,10 @@ if __name__ == '__main__':
 
     dataset_sizes = {'train': len(train_set), 'dev': len(dev_set), 'test': len(test_set)}
 
-    # Create data loaders with time warping support
+    # Create data loaders
+    # Continue from previous code...
+
+    # Create data loaders
     def collate_fn(batch):
         input_embeddings, seq_len, input_masks, input_mask_invert, target_ids, target_mask, \
         sentiment_labels, sent_level_EEG, input_raw_embeddings, word_contents, word_contents_attn, subject = zip(*batch)
@@ -316,10 +304,10 @@ if __name__ == '__main__':
         'test': DataLoader(test_set, batch_size=1, shuffle=False, num_workers=0, collate_fn=collate_fn)
     }
 
-    # Initialize model with pretrained BART
+    # Initialize model
     pretrained_bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
     if model_name == 'BrainTranslator':
-        model = model_decoding_raw_enhancement_time_wrap_GANS.BrainTranslator(
+        model = model_decoding_raw_enhancement_GANS.BrainTranslator(
             pretrained_bart, 
             in_feature=1024, 
             decoder_embedding_size=1024,
@@ -329,7 +317,7 @@ if __name__ == '__main__':
 
     model.to(device)
 
-    # Set up layers for training
+    # Training process
     if model_name in ['BrainTranslator']:
         for name, param in model.named_parameters():
             if param.requires_grad and 'pretrained' in name:
@@ -337,13 +325,11 @@ if __name__ == '__main__':
                     continue
                 param.requires_grad = False
 
-    # Training process
     if skip_step_one:
         if load_step1_checkpoint:
             stepone_checkpoint = '/kaggle/input/try-enhancement-eeg-to-text/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_5_5e-05_5e-05_unique_sent.pt'
             model.load_state_dict(torch.load(stepone_checkpoint))
         
-        # Step 2: Fine-tune on text generation
         model.freeze_pretrained_brain()
         optimizer_step2 = optim.SGD(
             filter(lambda p: p.requires_grad, model.parameters()),
@@ -354,12 +340,10 @@ if __name__ == '__main__':
             optimizer_step2,
             base_lr=5e-7,
             max_lr=5e-5,
-            mode="triangular2",
-            cycle_momentum=False
+            mode="triangular2"
         )
         
-        # Combined loss with time warping component
-        criterion = CombinedLoss(alpha=0.7, beta=0.1)  # beta controls time warping loss weight
+        criterion = CombinedLoss()
         trained_model = train_model(
             dataloaders, device, model, criterion, optimizer_step2, scheduler_step2,
             num_epochs=num_epochs_step2,
@@ -372,7 +356,6 @@ if __name__ == '__main__':
             stepone_checkpoint_not_first = '/kaggle/input/xlnet-step1-second-time/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_2_5e-05_5e-05_unique_sent.pt'
             model.load_state_dict(torch.load(stepone_checkpoint_not_first))
         
-        # Step 1: Train brain encoder
         model.freeze_pretrained_bart()
         optimizer_step1 = optim.SGD(
             filter(lambda p: p.requires_grad, model.parameters()),
@@ -383,11 +366,9 @@ if __name__ == '__main__':
             optimizer_step1,
             base_lr=step1_lr,
             max_lr=5e-3,
-            mode="triangular2",
-            cycle_momentum=False
+            mode="triangular2"
         )
         
-        # MSE loss for step 1
         criterion = nn.MSELoss()
         model = train_model(
             dataloaders, device, model, criterion, optimizer_step1, scheduler_step1,
@@ -401,4 +382,3 @@ if __name__ == '__main__':
     for writer in [train_writer, val_writer, dev_writer]:
         writer.flush()
         writer.close()
-
