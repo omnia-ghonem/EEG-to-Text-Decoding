@@ -338,16 +338,19 @@ class BrainTranslator(nn.Module):
                 subject_idx = self.subjects_map[subject]
                 subject_matrix = self.subject_matrices[subject_idx]  # Shape: [32, 1]
                 
-                # Apply 1D convolution and reshape
+                # Apply 1D convolution
                 conv_output = self.conv1d_point(tmp)  # Shape: [batch, 32, sequence_length]
                 
-                # Reshape and transpose for correct matrix multiplication
-                # Reshape to [32, sequence_length]
-                conv_output = conv_output.squeeze(0)
+                # Reshape conv_output to handle the 3D tensor properly
+                # Permute to get shape [sequence_length, batch, 32]
+                conv_output = conv_output.permute(2, 0, 1)
                 
-                # Ensure dimensions match for matrix multiplication
-                # [32, sequence_length] x [32, 1] -> [sequence_length, 1]
-                subject_output = torch.matmul(conv_output.t(), subject_matrix)
+                # Matrix multiplication with broadcasting
+                # [sequence_length, batch, 32] x [32, 1] -> [sequence_length, batch, 1]
+                subject_output = torch.matmul(conv_output, subject_matrix)
+                
+                # Squeeze extra dimensions
+                subject_output = subject_output.squeeze(-1).squeeze(-1)
                 
                 # Apply layer normalization
                 subject_output = self.subject_norm(subject_output)
