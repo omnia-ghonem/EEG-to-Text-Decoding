@@ -119,7 +119,7 @@ class HybridEncoder(nn.Module):
         lstm_out, _ = self.lstm(packed_x)
         
         if lengths is not None:
-            lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
+            lstm_out, _ = pack_padded_sequence(lstm_out, batch_first=True)
             
         # Self-attention mechanism
         attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
@@ -157,7 +157,7 @@ class EnhancedLSTMDecoder(nn.Module):
         if lengths is not None:
             packed_x = pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
             outputs, _ = self.lstm(packed_x)
-            outputs, _ = pad_packed_sequence(outputs, batch_first=True)
+            outputs, _ = pack_padded_sequence(outputs, batch_first=True)
         else:
             outputs, _ = self.lstm(x)
             
@@ -196,7 +196,7 @@ class FeatureEmbedded(nn.Module):
             )
             
             outputs, (hidden, cell) = self.lstm(lstm_input)
-            outputs, _ = pad_packed_sequence(outputs)
+            outputs, _ = pack_padded_sequence(outputs)
             
             # Use last hidden states from both directions
             final_hidden = torch.cat([hidden[-2], hidden[-1]], dim=1)
