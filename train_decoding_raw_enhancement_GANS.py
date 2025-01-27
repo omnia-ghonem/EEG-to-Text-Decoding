@@ -256,14 +256,14 @@ if __name__ == '__main__':
     if 'task2' in task_name:
         with open('/kaggle/input/dataset2/task2-NR-dataset_wRaw.pickle', 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
-    '''
+
     if 'taskNRv2' in task_name:
         with open('/kaggle/input/dataset3/task2-NR-2.0-dataset_wRaw.pickle', 'rb') as handle:
             whole_dataset_dicts.append(pickle.load(handle))
 
     with open(f'{CONFIG_DIR}/{save_name}.json', 'w') as out_config:
         json.dump(args, out_config, indent=4)
-
+    '''
     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
 
     # Create datasets
