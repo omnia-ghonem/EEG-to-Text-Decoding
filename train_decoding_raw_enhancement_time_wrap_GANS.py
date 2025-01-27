@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import time
 import sys
 
+# Import local modules
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_enhancement_time_wrap_GANS.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
@@ -31,13 +32,14 @@ from transformers import logging
 logging.set_verbosity_error()
 torch.autograd.set_detect_anomaly(True)
 
+# Setup tensorboard writers
 LOG_DIR = "runs_h"
 train_writer = SummaryWriter(os.path.join(LOG_DIR, "train"))
 val_writer = SummaryWriter(os.path.join(LOG_DIR, "train_full"))
 dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
 
-SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
-            'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 
+SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH',
+            'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS',
             'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
 
 class CombinedLoss(nn.Module):
@@ -279,7 +281,6 @@ if __name__ == '__main__':
 
     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
 
-    # Create datasets and dataloaders (remaining code stays the same)
     # Create datasets
     train_set = data_raw.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=args['subjects'],
                                      eeg_type=args['eeg_type'], bands=args['eeg_bands'], 
@@ -398,6 +399,3 @@ if __name__ == '__main__':
     for writer in [train_writer, val_writer, dev_writer]:
         writer.flush()
         writer.close()
-
-if __name__ == '__main__':
-    main()
