@@ -6,7 +6,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 class Generator(nn.Module):
     def __init__(self, input_dim=104, latent_dim=64, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(latent_dim, hidden_dim, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(latent_dim, hidden_dim, num_layers=2, batch_first=True)
         self.decoder = nn.Sequential(
             nn.Linear(hidden_dim, input_dim),
             nn.Tanh()
@@ -21,7 +21,7 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, input_dim=104, hidden_dim=256):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2, batch_first=True)
         self.classifier = nn.Sequential(
             nn.Linear(hidden_dim, 1)
         )
@@ -79,7 +79,7 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=4)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=5)
         self.layernorm_embedding = nn.LayerNorm(in_feature)
         self.bart = bart
 
@@ -200,7 +200,7 @@ class EnhancedLSTMDecoder(nn.Module):
         return self.layer_norm(self.output_projection(outputs))
 
 class FeatureEmbedded(nn.Module):
-    def __init__(self, input_dim=105, hidden_dim=256, num_layers=1):
+    def __init__(self, input_dim=105, hidden_dim=256, num_layers=2):
         super().__init__()
         self.lstm = nn.LSTM(
             input_size=input_dim,
