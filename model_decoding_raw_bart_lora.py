@@ -60,7 +60,7 @@ class BrainTranslator(nn.Module):
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=in_feature, nhead=additional_encoder_nhead,  
                                                        dim_feedforward=additional_encoder_dim_feedforward, 
                                                        dropout=0.1, activation="gelu", batch_first=True)
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=8)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-05)
 
         self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=1024, dropout=0.2)
@@ -123,7 +123,7 @@ class BrainTranslator(nn.Module):
             return out.logits
 
 class FeatureEmbedded(nn.Module):
-    def __init__(self, input_dim=105, hidden_dim=512, num_layers=4, is_bidirectional=True):
+    def __init__(self, input_dim=105, hidden_dim=512, num_layers=2, is_bidirectional=True):
         super().__init__()
 
         self.input_dim = input_dim
