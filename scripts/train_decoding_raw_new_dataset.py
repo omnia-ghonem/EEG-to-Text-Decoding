@@ -1,5 +1,5 @@
 python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_new_dataset.py --model_name BrainTranslator \
-    --task_name task1_task2_taskNRv2 \
+    --task_name handwriting \
     --one_step \
     --pretrained \
     --load_step1_checkpoint \
