@@ -19,18 +19,36 @@ import warnings
 warnings.filterwarnings('ignore')
 from transformers import logging
 logging.set_verbosity_error()
+import sys
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_new_dataset.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_new_dataset.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
+for path in sys.path:
+    print(path)
 
-# Import local modules
-from data_raw import HandwritingBCIDataset, collate_fn
+
+
+from data_raw_new_dataset import HandwritingBCIDataset, collate_fn
 import config
-import model_decoding_raw
+import model_decoding_raw_new_dataset
+from nltk.translate.bleu_score import corpus_bleu
+from rouge import Rouge
+from bert_score import score
 
+import warnings
+warnings.filterwarnings('ignore')
+from transformers import logging
+logging.set_verbosity_error()
+torch.autograd.set_detect_anomaly(True)
 # Set up tensorboard logging
 from torch.utils.tensorboard import SummaryWriter
 LOG_DIR = "runs_handwriting"
 train_writer = SummaryWriter(os.path.join(LOG_DIR, "train"))
 val_writer = SummaryWriter(os.path.join(LOG_DIR, "train_full"))
 dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
+
+
+
 
 def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num_epochs=25,
                 checkpoint_path_best='checkpoints/best/handwriting_model.pt',
@@ -267,9 +285,9 @@ if __name__ == '__main__':
     ]
 
     # Create datasets
-    train_set = HandwritingBCIDataset(session_paths, 'train', tokenizer)
-    dev_set = HandwritingBCIDataset(session_paths, 'dev', tokenizer)
-    test_set = HandwritingBCIDataset(session_paths, 'test', tokenizer)
+    train_set = data_raw_new_dataset.HandwritingBCIDataset(session_paths, 'train', tokenizer)
+    dev_set = data_raw_new_dataset.HandwritingBCIDataset(session_paths, 'dev', tokenizer)
+    test_set = data_raw_new_dataset.HandwritingBCIDataset(session_paths, 'test', tokenizer)
 
     print(f'[INFO] Train set size: {len(train_set)}')
     print(f'[INFO] Dev set size: {len(dev_set)}')
@@ -292,7 +310,7 @@ if __name__ == '__main__':
     # Initialize model
     if model_name == 'BrainTranslator':
         pretrained = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-        model = model_decoding_raw.BrainTranslator(
+        model = model_decoding_raw_new_dataset.BrainTranslator(
             pretrained,
             in_feature=1024,
             decoder_embedding_size=1024,
