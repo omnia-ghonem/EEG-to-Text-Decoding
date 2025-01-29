@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 import json
 import matplotlib.pyplot as plt
 from glob import glob
-from transformers import GPT2Tokenizer
+from transformers import BartTokenizer, BertTokenizer
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 
 
@@ -14,7 +14,6 @@ SST_SENTIMENT_LABELS = json.load(open('/kaggle/input/dataset/stanfordsentiment/s
 
 from scipy.signal import butter, lfilter
 from scipy.signal import freqz
-
 def butter_bandpass_filter(signal, lowcut, highcut, fs=500, order=5):
     nyq = 0.5 * fs
     low = lowcut/nyq
@@ -61,6 +60,7 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
         return_tensor = torch.from_numpy(sent_eeg_embedding)
         return normalize_1d(return_tensor)
 
+
     if sent_obj is None:
         # print(f'  - skip bad sentence')   
         return None
@@ -69,10 +69,10 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
     # get target label
     target_string = sent_obj['content']
     
-    # GPT-2 specific tokenization
     target_tokenized = tokenizer(target_string, padding='max_length', max_length=max_len, truncation=True, return_tensors='pt', return_attention_mask = True)
     input_sample['target_ids'] = target_tokenized['input_ids'][0]
 
+    
     # get sentence level EEG features
     sent_level_eeg_tensor = get_sent_eeg(sent_obj, bands)
     if torch.isnan(sent_level_eeg_tensor).any():
@@ -80,7 +80,7 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
     input_sample['sent_level_EEG'] = sent_level_eeg_tensor
 
     # get sentiment label
-    # handle some weird case
+    # handle some wierd case
     if 'emp11111ty' in target_string:
         target_string = target_string.replace('emp11111ty','empty')
     if 'film.1' in target_string:
@@ -100,6 +100,7 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
     if add_CLS_token:
         word_embeddings.append(torch.ones(104*len(bands)))
 
+
     for word in sent_obj['word']:
         # add each word's EEG embedding as Tensors
         word_level_eeg_tensor = get_word_embedding_eeg_tensor(word, eeg_type, bands = bands)
@@ -117,6 +118,11 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
             return None
         # check nan:
         if torch.isnan(word_level_eeg_tensor).any():
+            # print()
+            # print('[NaN ERROR] problem sent:',sent_obj['content'])
+            # print('[NaN ERROR] problem word:',word['content'])
+            # print('[NaN ERROR] problem word feature:',word_level_eeg_tensor)
+            # print()
             return None
             
         word_contents.append(word['content'])
@@ -129,23 +135,25 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
     if len(word_embeddings)<1:
         return None
     
+
     # pad to max_len
     n_eeg_representations = len(word_embeddings)
     while len(word_embeddings) < max_len:
+        # TODO: FBCSP
         word_embeddings.append(torch.zeros(105*len(bands)))
         if raw_eeg:
             word_raw_embeddings.append(torch.zeros(1,104))
 
-    # GPT-2 specific word contents tokenization
     word_contents_tokenized = tokenizer(' '.join(word_contents), padding='max_length', max_length=max_len, truncation=True, return_tensors='pt', return_attention_mask = True)
    
     input_sample['word_contents'] = word_contents_tokenized['input_ids'][0]
-    input_sample['word_contents_attn'] = word_contents_tokenized['attention_mask'][0]
+    input_sample['word_contents_attn'] = word_contents_tokenized['attention_mask'][0] #bart
 
     input_sample['input_embeddings'] = torch.stack(word_embeddings) # max_len * (105*num_bands)
     
     if raw_eeg:
         input_sample['input_raw_embeddings'] = word_raw_embeddings
+
 
     # mask out padding tokens
     input_sample['input_attn_mask'] = torch.zeros(max_len) # 0 is masked out
@@ -201,7 +209,7 @@ class ZuCo_dataset(Dataset):
             print(f'dev divider = {dev_divider}')
 
             if setting == 'unique_sent':
-                # take first 80% as trainset,# take first 80% as trainset, 10% as dev and 10% as test
+                # take first 80% as trainset, 10% as dev and 10% as test
                 if phase == 'train':
                     print('[INFO]initializing a train set...')
                     for key in subjects:
@@ -262,8 +270,8 @@ class ZuCo_dataset(Dataset):
                                 self.inputs.append(input_sample)
             print('++ adding task to dataset, now we have:', len(self.inputs))
 
-        print('[INFO]input tensor size:', self.inputs[0]['input_embeddings'].size())
-        print()
+        #print('[INFO]input tensor size:', self.inputs[0]['input_embeddings'].size())
+        #print()
 
     def __len__(self):
         return len(self.inputs)
@@ -284,47 +292,3 @@ class ZuCo_dataset(Dataset):
             input_sample['word_contents_attn'],
             input_sample['subject']
         )
-
-'''sanity test'''
-if __name__ == '__main__':
-
-    check_dataset = 'ZuCo'
-
-    if check_dataset == 'ZuCo':
-        whole_dataset_dicts = []
-        
-        dataset_path_task1 = '/kaggle/input/dataset/ZuCo/task1-SR/pickle/task1-SR-dataset_wRaw.pickle' 
-        with open(dataset_path_task1, 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
-
-        dataset_path_task2 = '/dataset/ZuCo/task2-NR/pickle/task2-NR-dataset.pickle' 
-        with open(dataset_path_task2, 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
-
-        dataset_path_task2_v2 = '/dataset/ZuCo/task2-NR-2.0/pickle/task2-NR-2.0-dataset.pickle' 
-        with open(dataset_path_task2_v2, 'rb') as handle:
-            whole_dataset_dicts.append(pickle.load(handle))
-
-        print()
-        for key in whole_dataset_dicts[0]:
-            print(f'task2_v2, sentence num in {key}:',len(whole_dataset_dicts[0][key]))
-        print()
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        # Add padding token to avoid warnings
-        tokenizer.pad_token = tokenizer.eos_token
-
-        dataset_setting = 'unique_sent'
-        subject_choice = 'ALL'
-        print(f'![Debug]using {subject_choice}')
-        eeg_type_choice = 'GD'
-        print(f'[INFO]eeg type {eeg_type_choice}') 
-        bands_choice = ['_t1','_t2','_a1','_a2','_b1','_b2','_g1','_g2'] 
-        print(f'[INFO]using bands {bands_choice}')
-        train_set = ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject = subject_choice, eeg_type = eeg_type_choice, bands = bands_choice, setting = dataset_setting, raweeg=True)
-        dev_set = ZuCo_dataset(whole_dataset_dicts, 'dev', tokenizer, subject = subject_choice, eeg_type = eeg_type_choice, bands = bands_choice, setting = dataset_setting, raweeg=True)
-        test_set = ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer, subject = subject_choice, eeg_type = eeg_type_choice, bands = bands_choice, setting = dataset_setting, raweeg=True)
-
-        print('trainset size:',len(train_set))
-        print('devset size:',len(dev_set))
-        print('testset size:',len(test_set))
