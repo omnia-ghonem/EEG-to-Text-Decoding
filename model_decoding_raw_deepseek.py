@@ -7,7 +7,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
 class ProjectionHead(nn.Module):
-    def __init__(self, embedding_dim, projection_dim=768, dropout=0.1):
+    def __init__(self, embedding_dim, projection_dim=4096, dropout=0.1):
         super().__init__()
         self.projection = nn.Linear(embedding_dim, projection_dim)
         self.gelu = nn.GELU()
