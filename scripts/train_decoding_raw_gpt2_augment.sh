@@ -8,6 +8,6 @@ python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_deepseek.py --mod
     --num_epoch_step2 10 \
     -lr1 0.00005 \
     -lr2 0.00005 \
-    -b 2\
+    -b 1\
     -s /kaggle/working/checkpoints/decoding_raw \
     -cuda cuda:0
