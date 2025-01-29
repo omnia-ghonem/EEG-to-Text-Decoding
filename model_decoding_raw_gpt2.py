@@ -41,7 +41,7 @@ class BrainTranslator(nn.Module):
         # Embedded EEG raw features
         self.hidden_dim=512
         self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
-        self.fc = ProjectionHead(embedding_dim=in_feature,projection_dim=in_feature,dropout=0.1)
+        self.fc = ProjectionHead(embedding_dim=in_feature,projection_dim=in_feature,dropout=0.1) #nn.Linear(in_feature, in_feature)
 
         # conv1d
         self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
@@ -65,10 +65,10 @@ class BrainTranslator(nn.Module):
 
         self.brain_projection = ProjectionHead(embedding_dim=in_feature,projection_dim=1024,dropout=0.2)
         
-        # GPT-2
+        # BART
         self.gpt2 = gpt2
         
-    def freeze_pretrained_gpt2(self):
+    def freeze_pretrained_bart(self):
         for name, param in self.named_parameters():
             param.requires_grad = True
             if ('gpt2' in name):
@@ -112,7 +112,7 @@ class BrainTranslator(nn.Module):
             loss = nn.MSELoss()
             return loss(brain_embedding, words_embedding)
         else:
-            out = self.gpt2(inputs_embeds = brain_embedding, attention_mask = input_masks_batch, return_dict = True, labels = target_ids_batch_converted)
+            out = self.gpt2(inputs_embeds = brain_embedding, attention_mask = input_masks_batch, return_dict = True,  labels = target_ids_batch_converted)
             if features==True:
                 return out.logits, brain_embedding
                 
