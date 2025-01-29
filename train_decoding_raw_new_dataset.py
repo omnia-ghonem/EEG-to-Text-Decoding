@@ -35,24 +35,24 @@ from nltk.translate.bleu_score import corpus_bleu
 from rouge import Rouge
 from bert_score import score
 
-import warnings
+
 warnings.filterwarnings('ignore')
-from transformers import logging
-logging.set_verbosity_error()
+from transformers import logging as transformers_logging
+transformers_logging.set_verbosity_error()
 torch.autograd.set_detect_anomaly(True)
+
+# Configure Python's logging
+python_logging.basicConfig(
+    level=python_logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 # Set up tensorboard logging
 from torch.utils.tensorboard import SummaryWriter
 LOG_DIR = "runs_handwriting"
 train_writer = SummaryWriter(os.path.join(LOG_DIR, "train"))
 val_writer = SummaryWriter(os.path.join(LOG_DIR, "train_full"))
 dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
-
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 
 class Trainer:
     def __init__(self, args):
