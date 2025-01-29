@@ -49,24 +49,6 @@ dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
 
 
 
-
-import os
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from transformers import BartTokenizer, BartForConditionalGeneration
-import logging
-from tqdm import tqdm
-from pathlib import Path
-import time
-from datetime import datetime
-
-from data_raw import HandwritingBCIDataset, collate_fn
-from model_decoding_raw import BrainTranslator
-from torch.utils.tensorboard import SummaryWriter
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -107,7 +89,7 @@ class Trainer:
         
         # Create datasets
         self.datasets = {
-            phase: HandwritingBCIDataset(
+            phase: data_raw_new_dataset.HandwritingBCIDataset(
                 root_dir=self.args['data_root'],
                 phase=phase,
                 tokenizer=self.tokenizer,
@@ -122,21 +104,21 @@ class Trainer:
                 self.datasets['train'],
                 batch_size=self.args['batch_size'],
                 shuffle=True,
-                collate_fn=collate_fn,
+                collate_fn=data_raw_new_dataset.collate_fn,
                 num_workers=self.args.get('num_workers', 4)
             ),
             'dev': DataLoader(
                 self.datasets['dev'],
                 batch_size=1,
                 shuffle=False,
-                collate_fn=collate_fn,
+                collate_fn=data_raw_new_dataset.collate_fn,
                 num_workers=self.args.get('num_workers', 4)
             ),
             'test': DataLoader(
                 self.datasets['test'],
                 batch_size=1,
                 shuffle=False,
-                collate_fn=collate_fn,
+                collate_fn=data_raw_new_dataset.collate_fn,
                 num_workers=self.args.get('num_workers', 4)
             )
         }
@@ -147,7 +129,7 @@ class Trainer:
         bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
         
         # Create brain translator model
-        self.model = BrainTranslator(
+        self.model = model_decoding_raw_new_dataset.BrainTranslator(
             bart_model=bart,
             input_dim=192,  # Number of electrodes
             hidden_dim=self.args.get('hidden_dim', 512),
