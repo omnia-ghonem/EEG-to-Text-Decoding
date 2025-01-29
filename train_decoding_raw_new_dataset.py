@@ -258,8 +258,8 @@ if __name__ == '__main__':
     else:
         save_name = f'handwriting_{task_name}_2step_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}'
 
-    output_checkpoint_name_best = os.path.join(CHECKPOINT_DIR_BEST, f'{save_name}.pt')
-    output_checkpoint_name_last = os.path.join(CHECKPOINT_DIR_LAST, f'{save_name}.pt')
+    output_checkpoint_name_best = f'/kaggle/working/checkpoints/decoding_raw/best/{save_name}.pt'
+    output_checkpoint_name_last = f'/kaggle/working/checkpoints/decoding_raw/best/{save_name}.pt'
 
     # Set random seeds
     seed_val = 312
@@ -275,15 +275,14 @@ if __name__ == '__main__':
     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
 
     # Get handwriting BCI dataset paths
-    data_root = args['data_path']  # Set in config
+    data_root = "/kaggle/input/handwriting-bci/handwritingBCIData/Datasets"
     session_paths = [
         os.path.join(data_root, session) for session in [
-            "2019.05.08", "2019.11.25", "2019.12.09", "2019.12.11",
-            "2019.12.18", "2019.12.20", "2020.01.06", "2020.01.08",
-            "2020.01.13", "2020.01.15"
+            "t5.2019.05.08", "t5.2019.11.25", "t5.2019.12.09", "t5.2019.12.11",
+            "t5.2019.12.18", "t5.2019.12.20", "t5.2020.01.06", "t5.2020.01.08",
+            "t5.2020.01.13", "t5.2020.01.15"
         ]
     ]
-
     # Create datasets
     train_set = data_raw_new_dataset.HandwritingBCIDataset(session_paths, 'train', tokenizer)
     dev_set = data_raw_new_dataset.HandwritingBCIDataset(session_paths, 'dev', tokenizer)
@@ -320,7 +319,7 @@ if __name__ == '__main__':
     model.to(device)
 
     # Save config
-    with open(os.path.join(CONFIG_DIR, f'{save_name}.json'), 'w') as f:
+    withopen(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as f:
         json.dump(args, f, indent=4)
 
     if skip_step_one:
