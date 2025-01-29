@@ -22,14 +22,14 @@ logging.set_verbosity_error()
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_new_dataset.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_new_dataset.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config_new_dataset.py')
 for path in sys.path:
     print(path)
 
 
 
 import data_raw_new_dataset 
-import config
+import config_new_dataset
 import model_decoding_raw_new_dataset
 from nltk.translate.bleu_score import corpus_bleu
 from rouge import Rouge
