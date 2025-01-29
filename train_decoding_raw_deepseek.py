@@ -395,7 +395,7 @@ if __name__ == '__main__':
 
     ''' set up model '''
     if model_name == 'BrainTranslator':
-        pretrained =AutoModelForCausalLM.from_pretrained("deepseek-ai/deepseek-vl-1.3b-chat",device_map="auto",trust_remote_code=True,torch_dtype=torch.bfloat16)
+        pretrained =AutoModelForCausalLM.from_pretrained("deepseek-ai/deepseek-vl-1.3b-chat",trust_remote_code=True,torch_dtype=torch.bfloat16)
 
         model = model_decoding_raw_deepseek.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
                                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
