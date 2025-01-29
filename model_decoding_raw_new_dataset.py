@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-
+import math
 class TemporalEncoder(nn.Module):
     def __init__(self, input_dim=192, hidden_dim=512, num_layers=2):
         super().__init__()
