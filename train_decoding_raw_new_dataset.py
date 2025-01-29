@@ -28,7 +28,7 @@ for path in sys.path:
 
 
 
-from data_raw_new_dataset import HandwritingBCIDataset, collate_fn
+import data_raw_new_dataset 
 import config
 import model_decoding_raw_new_dataset
 from nltk.translate.bleu_score import corpus_bleu
