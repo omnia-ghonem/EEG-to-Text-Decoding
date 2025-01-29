@@ -69,8 +69,25 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
     # get target label
     target_string = sent_obj['content']
     
-    target_tokenized = tokenizer(target_string, padding='max_length', max_length=max_len, truncation=True, return_tensors='pt', return_attention_mask = True)
-    input_sample['target_ids'] = target_tokenized['input_ids'][0]
+    # Sanitize input string
+    if not target_string or not isinstance(target_string, str):
+        print(f'Invalid target string for subject {subj}: {target_string}')
+        return None
+    
+    try:
+        # Add error handling for tokenization
+        target_tokenized = tokenizer(
+            target_string, 
+            padding='max_length', 
+            max_length=max_len, 
+            truncation=True, 
+            return_tensors='pt', 
+            return_attention_mask=True
+        )
+        input_sample['target_ids'] = target_tokenized['input_ids'][0]
+    except Exception as e:
+        print(f'Tokenization error for string "{target_string}": {e}')
+        return None
 
     
     # get sentence level EEG features
@@ -80,7 +97,7 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
     input_sample['sent_level_EEG'] = sent_level_eeg_tensor
 
     # get sentiment label
-    # handle some wierd case
+    # handle some weird cases
     if 'emp11111ty' in target_string:
         target_string = target_string.replace('emp11111ty','empty')
     if 'film.1' in target_string:
@@ -100,7 +117,6 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
     if add_CLS_token:
         word_embeddings.append(torch.ones(104*len(bands)))
 
-
     for word in sent_obj['word']:
         # add each word's EEG embedding as Tensors
         word_level_eeg_tensor = get_word_embedding_eeg_tensor(word, eeg_type, bands = bands)
@@ -118,11 +134,6 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
             return None
         # check nan:
         if torch.isnan(word_level_eeg_tensor).any():
-            # print()
-            # print('[NaN ERROR] problem sent:',sent_obj['content'])
-            # print('[NaN ERROR] problem word:',word['content'])
-            # print('[NaN ERROR] problem word feature:',word_level_eeg_tensor)
-            # print()
             return None
             
         word_contents.append(word['content'])
@@ -144,16 +155,20 @@ def get_input_sample(sent_obj, tokenizer, eeg_type = 'GD', bands = ['_t1','_t2',
         if raw_eeg:
             word_raw_embeddings.append(torch.zeros(1,104))
 
-    word_contents_tokenized = tokenizer(' '.join(word_contents), padding='max_length', max_length=max_len, truncation=True, return_tensors='pt', return_attention_mask = True)
-   
-    input_sample['word_contents'] = word_contents_tokenized['input_ids'][0]
-    input_sample['word_contents_attn'] = word_contents_tokenized['attention_mask'][0] #bart
+    try:
+        # Add error handling for word contents tokenization
+        word_contents_tokenized = tokenizer(' '.join(word_contents), padding='max_length', max_length=max_len, truncation=True, return_tensors='pt', return_attention_mask = True)
+    
+        input_sample['word_contents'] = word_contents_tokenized['input_ids'][0]
+        input_sample['word_contents_attn'] = word_contents_tokenized['attention_mask'][0] #bart
+    except Exception as e:
+        print(f'Word contents tokenization error: {e}')
+        return None
 
     input_sample['input_embeddings'] = torch.stack(word_embeddings) # max_len * (105*num_bands)
     
     if raw_eeg:
         input_sample['input_raw_embeddings'] = word_raw_embeddings
-
 
     # mask out padding tokens
     input_sample['input_attn_mask'] = torch.zeros(max_len) # 0 is masked out
