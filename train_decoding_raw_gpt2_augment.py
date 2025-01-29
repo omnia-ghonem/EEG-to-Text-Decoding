@@ -343,7 +343,7 @@ if __name__ == '__main__':
 
     # train dataset
     train_set = data_raw_gpt2_augment.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
-                             eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
+                             eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True,use_augmentation=True)
     # dev dataset
     dev_set = data_raw_gpt2_augment.ZuCo_dataset(whole_dataset_dicts, 'dev', tokenizer, subject=subject_choice,
                            eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
