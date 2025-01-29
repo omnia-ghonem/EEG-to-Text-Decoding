@@ -319,7 +319,7 @@ if __name__ == '__main__':
     model.to(device)
 
     # Save config
-    withopen(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as f:
+    with open(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as f:
         json.dump(args, f, indent=4)
 
     if skip_step_one:
