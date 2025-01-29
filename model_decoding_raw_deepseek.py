@@ -1,10 +1,9 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.data
 from torch.nn.utils.rnn import pack_padded_sequence
 from transformers import AutoTokenizer, AutoModelForCausalLM
-
-
+import gc
 
 class ProjectionHead(nn.Module):
     def __init__(self, embedding_dim, projection_dim=4096, dropout=0.1):
@@ -13,7 +12,7 @@ class ProjectionHead(nn.Module):
         self.gelu = nn.GELU()
         self.fc = nn.Linear(projection_dim, projection_dim)
         self.dropout = nn.Dropout(dropout)
-    
+        
     def forward(self, x):
         projected = self.projection(x)
         x = self.gelu(projected)
@@ -21,101 +20,6 @@ class ProjectionHead(nn.Module):
         x = self.dropout(x)
         x = x + projected
         return x
-
-class BrainTranslator(nn.Module):
-    def __init__(self, deepseek, in_feature=1024, decoder_embedding_size=4096, 
-                 additional_encoder_nhead=32, additional_encoder_dim_feedforward=16384):
-        super(BrainTranslator, self).__init__()
-        
-        # Embedded EEG raw features
-        self.hidden_dim = 512
-        self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
-        self.fc = ProjectionHead(embedding_dim=in_feature, projection_dim=in_feature, dropout=0.1)
-
-        # conv1d
-        self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
-
-        SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
-                   'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 
-                   'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
-        self.subjects_map_id = {subject: idx for idx, subject in enumerate(SUBJECTS)}
-        
-        # learnable subject matrices
-        self.subject_matrices = nn.ParameterList([nn.Parameter(torch.randn(64, 1)) for _ in range(len(SUBJECTS))])
-        
-        # Brain transformer encoder
-        self.pos_embedding = nn.Parameter(torch.randn(1, 56, in_feature))
-        self.encoder_layer = nn.TransformerEncoderLayer(
-            d_model=in_feature, 
-            nhead=additional_encoder_nhead,
-            dim_feedforward=additional_encoder_dim_feedforward,
-            dropout=0.1,
-            activation="gelu",
-            batch_first=True
-        )
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
-        self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-5)
-        self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=4096, dropout=0.2)
-        
-        # Language Model
-        self.deepseek = deepseek
-
-    def freeze_pretrained_bart(self):
-        for name, param in self.named_parameters():
-            param.requires_grad = True
-            if 'deepseek' in name:
-                param.requires_grad = False
-
-    def freeze_pretrained_brain(self):
-        for name, param in self.named_parameters():
-            param.requires_grad = False
-            if 'deepseek' in name:
-                param.requires_grad = True
-
-    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, 
-                target_ids_batch_converted, lenghts_words, word_contents_batch, 
-                word_contents_attn_batch, stepone, subject_batch, device, features=False):
-        feature_embedding = self.feature_embedded(input_embeddings_batch, lenghts_words, device)
-        if len(feature_embedding.shape) == 2:
-            feature_embedding = torch.unsqueeze(feature_embedding, 0)
-        encoded_embedding = self.fc(feature_embedding)
-
-        # subject layer
-        encoded_embedding_subject = []
-        for i in range(encoded_embedding.shape[0]):
-            tmp = torch.unsqueeze(encoded_embedding[i,:,:], 1)
-            tmp = self.conv1d_point(tmp)
-            tmp = torch.swapaxes(tmp, 1, 2)
-            mat_subject = self.subject_matrices[self.subjects_map_id[subject_batch[i]]].to(device)
-            tmp = torch.matmul(tmp, mat_subject)
-            tmp = torch.squeeze(tmp)
-            encoded_embedding_subject.append(tmp)        
-        
-        if len(encoded_embedding_subject) == 1:
-            encoded_embedding_subject = torch.unsqueeze(encoded_embedding_subject[0], 0)
-        else:
-            encoded_embedding_subject = torch.stack(encoded_embedding_subject, 0).to(device)
-
-        brain_embedding = encoded_embedding_subject + self.pos_embedding
-        brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
-        brain_embedding = self.layernorm_embedding(brain_embedding)
-        brain_embedding = self.brain_projection(brain_embedding)
-
-        if stepone:
-            words_embedding = self.deepseek.model.embed_tokens(word_contents_batch)
-            brain_embedding = brain_embedding.to(torch.bfloat16)
-            loss = nn.MSELoss()
-            return loss(brain_embedding, words_embedding)
-        else:
-            out = self.deepseek(
-                inputs_embeds=brain_embedding,
-                attention_mask=input_masks_batch,
-                labels=target_ids_batch_converted,
-                return_dict=True
-            )
-            if features:
-                return out.logits, brain_embedding
-            return out.logits
 
 class FeatureEmbedded(nn.Module):
     def __init__(self, input_dim=105, hidden_dim=512, num_layers=2, is_bidirectional=True):
@@ -161,4 +65,134 @@ class FeatureEmbedded(nn.Module):
             sentence_embedding = torch.stack(sentence_embedding, 0)
             sentence_embedding_batch.append(sentence_embedding)
 
+        del lstm_outs, hidden, lstm_input  # Free memory
+        torch.cuda.empty_cache()
+        
         return torch.squeeze(torch.stack(sentence_embedding_batch, 0)).to(device)
+
+class BrainTranslator(nn.Module):
+    def __init__(self, deepseek, in_feature=1024, decoder_embedding_size=4096, 
+                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096,
+                 gradient_checkpointing=True):
+        super(BrainTranslator, self).__init__()
+        
+        # Enable gradient checkpointing for memory efficiency
+        self.gradient_checkpointing = gradient_checkpointing
+        
+        # Embedded EEG raw features
+        self.hidden_dim = 512
+        self.feature_embedded = FeatureEmbedded(input_dim=104, hidden_dim=self.hidden_dim)
+        self.fc = ProjectionHead(embedding_dim=in_feature, projection_dim=in_feature, dropout=0.1)
+
+        # conv1d
+        self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
+
+        SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
+                   'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 
+                   'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
+        self.subjects_map_id = {subject: idx for idx, subject in enumerate(SUBJECTS)}
+        
+        # learnable subject matrices
+        self.subject_matrices = nn.ParameterList([nn.Parameter(torch.randn(64, 1)) for _ in range(len(SUBJECTS))])
+        
+        # Brain transformer encoder with reduced size
+        self.pos_embedding = nn.Parameter(torch.randn(1, 56, in_feature))
+        self.encoder_layer = nn.TransformerEncoderLayer(
+            d_model=in_feature, 
+            nhead=additional_encoder_nhead,
+            dim_feedforward=additional_encoder_dim_feedforward,
+            dropout=0.1,
+            activation="gelu",
+            batch_first=True
+        )
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=6)  # Reduced from 12
+        self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-5)
+        self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=4096, dropout=0.2)
+        
+        # Language Model
+        self.deepseek = deepseek
+        if self.gradient_checkpointing and hasattr(self.deepseek, 'gradient_checkpointing_enable'):
+            self.deepseek.gradient_checkpointing_enable()
+
+    def freeze_pretrained_bart(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = True
+            if 'deepseek' in name:
+                param.requires_grad = False
+
+    def freeze_pretrained_brain(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = False
+            if 'deepseek' in name:
+                param.requires_grad = True
+
+    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, 
+                target_ids_batch_converted, lenghts_words, word_contents_batch, 
+                word_contents_attn_batch, stepone, subject_batch, device, features=False):
+        
+        # Clear memory before processing
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+        feature_embedding = self.feature_embedded(input_embeddings_batch, lenghts_words, device)
+        if len(feature_embedding.shape) == 2:
+            feature_embedding = torch.unsqueeze(feature_embedding, 0)
+        encoded_embedding = self.fc(feature_embedding)
+
+        # Subject layer with memory optimization
+        encoded_embedding_subject = []
+        for i in range(encoded_embedding.shape[0]):
+            tmp = torch.unsqueeze(encoded_embedding[i,:,:], 1)
+            tmp = self.conv1d_point(tmp)
+            tmp = torch.swapaxes(tmp, 1, 2)
+            mat_subject = self.subject_matrices[self.subjects_map_id[subject_batch[i]]].to(device)
+            tmp = torch.matmul(tmp, mat_subject)
+            tmp = torch.squeeze(tmp)
+            encoded_embedding_subject.append(tmp)
+            
+            # Clear intermediate tensors
+            del tmp, mat_subject
+            torch.cuda.empty_cache()
+
+        if len(encoded_embedding_subject) == 1:
+            encoded_embedding_subject = torch.unsqueeze(encoded_embedding_subject[0], 0)
+        else:
+            encoded_embedding_subject = torch.stack(encoded_embedding_subject, 0).to(device)
+
+        brain_embedding = encoded_embedding_subject + self.pos_embedding
+        
+        if self.gradient_checkpointing:
+            def create_custom_forward(module):
+                def custom_forward(*inputs):
+                    return module(*inputs)
+                return custom_forward
+            brain_embedding = torch.utils.checkpoint.checkpoint(
+                create_custom_forward(self.encoder),
+                brain_embedding, 
+                input_masks_invert
+            )
+        else:
+            brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
+            
+        brain_embedding = self.layernorm_embedding(brain_embedding)
+        brain_embedding = self.brain_projection(brain_embedding)
+
+        if stepone:
+            words_embedding = self.deepseek.model.embed_tokens(word_contents_batch)
+            brain_embedding = brain_embedding.to(torch.bfloat16)
+            loss = nn.MSELoss()
+            return loss(brain_embedding, words_embedding)
+        else:
+            out = self.deepseek(
+                inputs_embeds=brain_embedding.to(torch.bfloat16),
+                attention_mask=input_masks_batch,
+                labels=target_ids_batch_converted,
+                return_dict=True
+            )
+            if features:
+                return out.logits, brain_embedding
+            return out.logits
+            
+        # Clear any remaining intermediate tensors
+        del encoded_embedding, encoded_embedding_subject, brain_embedding
+        torch.cuda.empty_cache()
