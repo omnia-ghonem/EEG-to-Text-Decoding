@@ -11,7 +11,8 @@ import json
 from glob import glob
 import time
 from tqdm import tqdm
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import BartTokenizer, BartForConditionalGeneration, BertTokenizer, BertConfig, BertForSequenceClassification, RobertaTokenizer, RobertaForSequenceClassification
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_gpt2.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_gpt2.py')
@@ -39,6 +40,8 @@ LOG_DIR = "runs_h"
 train_writer = SummaryWriter(os.path.join(LOG_DIR, "train"))
 val_writer = SummaryWriter(os.path.join(LOG_DIR, "train_full"))
 dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
+
+
 
 SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
             'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
@@ -79,6 +82,7 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num
                 for batch_idx, (_, seq_len, input_masks, input_mask_invert, target_ids, target_mask, sentiment_labels, sent_level_EEG, input_raw_embeddings, input_raw_embeddings_lengths, word_contents, word_contents_attn, subject_batch) in enumerate(tepoch):
 
                     # load in batch
+                    #input_embeddings_batch = torch.stack(input_embeddings_fbcsp).to(device).float()
                     input_embeddings_batch = input_raw_embeddings.float().to(device)
                     input_embeddings_lengths_batch = torch.stack([torch.tensor(a.clone().detach()) for a in input_raw_embeddings_lengths], 0).to(device)
                     input_masks_batch = torch.stack(input_masks, 0).to(device)
@@ -104,7 +108,7 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num
                     optimizer.zero_grad()
 
                     seq2seqLMoutput = model(
-                        input_embeddings_batch, input_masks_batch, input_mask_invert_batch, target_ids_batch, input_embeddings_lengths_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batchdevice, features=False)
+                        input_embeddings_batch, input_masks_batch, input_mask_invert_batch, target_ids_batch, input_embeddings_lengths_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device)
 
                     """replace padding ids in target_ids with -100"""
                     target_ids_batch[target_ids_batch ==
@@ -114,15 +118,15 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num
                     if stepone==True:
                         loss = seq2seqLMoutput
                     else:
-                        loss = seq2seqLMoutput.loss
+                        loss = criterion(seq2seqLMoutput.permute(0, 2, 1), target_ids_batch.long()) 
 
                     if phase == 'test' and stepone==False:
-                        logits = seq2seqLMoutput.logits
+                        logits = seq2seqLMoutput
                         probs = logits[0].softmax(dim=1)
                         values, predictions = probs.topk(1)
                         predictions = torch.squeeze(predictions)
                         predicted_string = tokenizer.decode(predictions).split(
-                            '<|endoftext|>')[0]
+                            '</s></s>')[0].replace('<s>', '')
 
                         # convert to int list
                         predictions = predictions.tolist()
@@ -149,10 +153,10 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num
                     tepoch.set_postfix(loss=loss.item(), lr=scheduler.get_lr())
 
                     if phase == 'train':
-                        val_writer.add_scalar("train_full", loss.item(), index_plot)
+                        val_writer.add_scalar("train_full", loss.item(), index_plot) #(epoch+1)*batch_idx)
                         index_plot=index_plot+1
                     if phase == 'dev':
-                        dev_writer.add_scalar("dev_full", loss.item(), index_plot_dev)
+                        dev_writer.add_scalar("dev_full", loss.item(), index_plot_dev) #(epoch+1)*batch_idx)
                         index_plot_dev=index_plot_dev+1
                     
                     if phase == 'train':
@@ -335,8 +339,6 @@ if __name__ == '__main__':
 
     if model_name in ['BrainTranslator', 'BrainTranslatorNaive']:
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        # Add padding token to avoid warnings
-        tokenizer.pad_token = tokenizer.eos_token
 
     # train dataset
     train_set = data_raw_gpt2.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
@@ -356,40 +358,28 @@ if __name__ == '__main__':
 
     # Allows to pad and get real size of eeg vectors
     def pad_and_sort_batch(data_loader_batch):
-            """
-            data_loader_batch should be a list of (sequence, target, length) tuples...
-            Returns a padded tensor of sequences sorted from longest to shortest,
-            """
-            input_embeddings, seq_len, input_masks, input_mask_invert, target_ids, target_mask, sentiment_labels, sent_level_EEG, input_raw_embeddings, word_contents, word_contents_attn, subject = tuple(
-                zip(*data_loader_batch))
-    
-            raw_eeg = []
-            input_raw_embeddings_lengths = []
-            
-            # Handle input_raw_embeddings (which might be a list of tensors)
-            for sentence in input_raw_embeddings:
-                # If sentence is not a list, convert it to a list
-                if not isinstance(sentence, list):
-                    sentence = [sentence]
-                
-                # Get lengths of each tensor in the sentence
-                input_raw_embeddings_lengths.append(
-                    torch.Tensor([a.size(0) for a in sentence]))
-                
-                # Pad and permute the sentence
-                padded_sentence = pad_sequence(
-                    sentence, batch_first=True, padding_value=0).permute(1, 0, 2)
-                raw_eeg.append(padded_sentence)
-    
-            # Pad the raw EEG data
-            input_raw_embeddings = pad_sequence(
-                raw_eeg, batch_first=True, padding_value=0).permute(0, 2, 1, 3)
-    
-            return input_embeddings, seq_len, input_masks, input_mask_invert, target_ids, target_mask, sentiment_labels, sent_level_EEG, input_raw_embeddings, input_raw_embeddings_lengths, word_contents, word_contents_attn, subject  # lengths
-    
+        """
+        data_loader_batch should be a list of (sequence, target, length) tuples...
+        Returns a padded tensor of sequences sorted from longest to shortest,
+        """
+        input_embeddings, seq_len, input_masks, input_mask_invert, target_ids, target_mask, sentiment_labels, sent_level_EEG, input_raw_embeddings, word_contents, word_contents_attn, subject = tuple(
+            zip(*data_loader_batch))
+
+        raw_eeg = []
+        input_raw_embeddings_lenghts = []
+        for sentence in input_raw_embeddings:
+            input_raw_embeddings_lenghts.append(
+                torch.Tensor([a.size(0) for a in sentence]))
+            raw_eeg.append(pad_sequence(
+                sentence, batch_first=True, padding_value=0).permute(1, 0, 2))
+
+        input_raw_embeddings = pad_sequence(
+            raw_eeg, batch_first=True, padding_value=0).permute(0, 2, 1, 3)
+
+        return input_embeddings, seq_len, input_masks, input_mask_invert, target_ids, target_mask, sentiment_labels, sent_level_EEG, input_raw_embeddings, input_raw_embeddings_lenghts, word_contents, word_contents_attn, subject  # lengths
 
 
-# train dataloader
+    # train dataloader
     train_dataloader = DataLoader(
         train_set, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=pad_and_sort_batch)  # 4
     # dev dataloader
@@ -415,14 +405,15 @@ if __name__ == '__main__':
 
     ######################################################
 
-    # closely follow GPT-2 recommendation
+    # closely follow BART paper
     if model_name in ['BrainTranslator']:
         for name, param in model.named_parameters():
-            if param.requires_grad and 'gpt2' in name:
-                if ('wte' in name) or ('wpe' in name) or ('h.0' in name):
+            if param.requires_grad and 'pretrained' in name:
+                if ('shared' in name) or ('embed_positions' in name) or ('encoder.layers.0' in name):
                     continue
                 else:
                     param.requires_grad = False
+            
 
     if skip_step_one:
         if load_step1_checkpoint:
@@ -438,6 +429,7 @@ if __name__ == '__main__':
         '''step two trainig'''
         ######################################################
 
+        #model.load_state_dict(torch.load("./checkpoints/decoding_raw_104_h/last/task1_task2_taskNRv2_finetune_BrainTranslator_skipstep1_b4_25_100_5e-05_5e-05_unique_sent.pt"))
         model.freeze_pretrained_brain()
 
         ''' set up optimizer and scheduler'''
@@ -472,6 +464,8 @@ if __name__ == '__main__':
 
         #################################################################################
 
+
+
     else:
         '''step one trainig'''
     ######################################################
@@ -492,7 +486,7 @@ if __name__ == '__main__':
 
         ''' set up loss function '''
         criterion = nn.MSELoss()
-        model.freeze_pretrained_gpt2()
+        model.freeze_pretrained_bart()
 
         print('=== start Step1 training ... ===')
         # print training layers
