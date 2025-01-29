@@ -65,7 +65,7 @@ class FeatureEmbedded(nn.Module):
             sentence_embedding = torch.stack(sentence_embedding, 0)
             sentence_embedding_batch.append(sentence_embedding)
 
-        del lstm_outs, hidden, lstm_input  # Free memory
+        del lstm_outs, hidden, lstm_input
         torch.cuda.empty_cache()
         
         return torch.squeeze(torch.stack(sentence_embedding_batch, 0)).to(device)
@@ -76,7 +76,6 @@ class BrainTranslator(nn.Module):
                  gradient_checkpointing=True):
         super(BrainTranslator, self).__init__()
         
-        # Enable gradient checkpointing for memory efficiency
         self.gradient_checkpointing = gradient_checkpointing
         
         # Embedded EEG raw features
@@ -95,7 +94,7 @@ class BrainTranslator(nn.Module):
         # learnable subject matrices
         self.subject_matrices = nn.ParameterList([nn.Parameter(torch.randn(64, 1)) for _ in range(len(SUBJECTS))])
         
-        # Brain transformer encoder with reduced size
+        # Brain transformer encoder
         self.pos_embedding = nn.Parameter(torch.randn(1, 56, in_feature))
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=in_feature, 
@@ -105,7 +104,7 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=6)  # Reduced from 12
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=6)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-5)
         self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=4096, dropout=0.2)
         
@@ -126,11 +125,17 @@ class BrainTranslator(nn.Module):
             if 'deepseek' in name:
                 param.requires_grad = True
 
+    def _expand_mask(self, mask):
+        """Convert 1D attention mask to 2D attention mask"""
+        bsz = mask.size(0)
+        seq_len = mask.size(1)
+        mask_2d = mask.unsqueeze(1).expand(bsz, seq_len, seq_len)
+        return mask_2d.bool()
+
     def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, 
                 target_ids_batch_converted, lenghts_words, word_contents_batch, 
                 word_contents_attn_batch, stepone, subject_batch, device, features=False):
         
-        # Clear memory before processing
         torch.cuda.empty_cache()
         gc.collect()
         
@@ -139,7 +144,6 @@ class BrainTranslator(nn.Module):
             feature_embedding = torch.unsqueeze(feature_embedding, 0)
         encoded_embedding = self.fc(feature_embedding)
 
-        # Subject layer with memory optimization
         encoded_embedding_subject = []
         for i in range(encoded_embedding.shape[0]):
             tmp = torch.unsqueeze(encoded_embedding[i,:,:], 1)
@@ -150,7 +154,6 @@ class BrainTranslator(nn.Module):
             tmp = torch.squeeze(tmp)
             encoded_embedding_subject.append(tmp)
             
-            # Clear intermediate tensors
             del tmp, mat_subject
             torch.cuda.empty_cache()
 
@@ -161,18 +164,25 @@ class BrainTranslator(nn.Module):
 
         brain_embedding = encoded_embedding_subject + self.pos_embedding
         
+        # Create attention mask for transformer
+        if input_masks_invert is not None:
+            # Convert mask from [batch_size, seq_len] to [batch_size, seq_len, seq_len]
+            attention_mask = ~self._expand_mask(input_masks_invert)
+        else:
+            attention_mask = None
+
         if self.gradient_checkpointing:
             def create_custom_forward(module):
                 def custom_forward(*inputs):
-                    return module(*inputs)
+                    return module(inputs[0], src_key_padding_mask=inputs[1])
                 return custom_forward
             brain_embedding = torch.utils.checkpoint.checkpoint(
                 create_custom_forward(self.encoder),
                 brain_embedding, 
-                input_masks_invert
+                attention_mask
             )
         else:
-            brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
+            brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=attention_mask)
             
         brain_embedding = self.layernorm_embedding(brain_embedding)
         brain_embedding = self.brain_projection(brain_embedding)
@@ -193,6 +203,5 @@ class BrainTranslator(nn.Module):
                 return out.logits, brain_embedding
             return out.logits
             
-        # Clear any remaining intermediate tensors
         del encoded_embedding, encoded_embedding_subject, brain_embedding
         torch.cuda.empty_cache()
