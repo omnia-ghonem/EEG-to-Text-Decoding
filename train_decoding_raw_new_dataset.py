@@ -166,8 +166,8 @@ class Trainer:
         patience = self.args.get('patience', 5)
         patience_counter = 0
         
-        for epoch in range(self.args['num_epochs']):
-            logging.info(f"Epoch {epoch+1}/{self.args['num_epochs']}")
+        for epoch in range(self.args['num_epoch_step1']):
+            logging.info(f"Epoch {epoch+1}/{self.args['num_epoch_step1']}")
             
             # Training phase
             train_loss = self.train_epoch()
