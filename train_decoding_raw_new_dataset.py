@@ -315,7 +315,7 @@ class Trainer:
 
 if __name__ == '__main__':
     # Get config arguments
-    args = get_config('train_decoding')
+    args = config_new_dataset.get_config('train_decoding')
     
     # Set random seeds
     seed_val = 312
