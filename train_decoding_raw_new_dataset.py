@@ -295,11 +295,11 @@ if __name__ == '__main__':
 
     # Create dataloaders
     train_dataloader = DataLoader(train_set, batch_size=batch_size, 
-                                shuffle=True, num_workers=0, collate_fn=collate_fn)
+                                shuffle=True, num_workers=0, collate_fn=data_raw_new_dataset.collate_fn)
     val_dataloader = DataLoader(dev_set, batch_size=1, 
-                              shuffle=False, num_workers=0, collate_fn=collate_fn)
+                              shuffle=False, num_workers=0, collate_fn=data_raw_new_dataset.collate_fn)
     test_dataloader = DataLoader(test_set, batch_size=1, 
-                               shuffle=False, num_workers=0, collate_fn=collate_fn)
+                               shuffle=False, num_workers=0, collate_fn=data_raw_new_dataset.collate_fn)
 
     dataloaders = {
         'train': train_dataloader,
