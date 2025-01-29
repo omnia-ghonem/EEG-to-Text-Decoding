@@ -154,12 +154,19 @@ def get_input_sample(sent_obj, tokenizer, eeg_type='GD', bands=['_t1','_t2','_a1
 
     return input_sample
 
+def setup_tokenizer(tokenizer):
+    # Set up padding token
+    tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer
+
 class ZuCo_dataset(Dataset):
     def __init__(self, input_dataset_dicts, phase, tokenizer, subject='ALL', eeg_type='GD', 
                  bands=['_t1','_t2','_a1','_a2','_b1','_b2','_g1','_g2'], raweeg=False, 
                  setting='unique_sent', is_add_CLS_token=False):
+        # Setup tokenizer with padding token
+        self.tokenizer = setup_tokenizer(tokenizer)
         self.inputs = []
-        self.tokenizer = tokenizer
+        # Tokenizer is now set up in the setup_tokenizer function call above
 
         if not isinstance(input_dataset_dicts, list):
             input_dataset_dicts = [input_dataset_dicts]
