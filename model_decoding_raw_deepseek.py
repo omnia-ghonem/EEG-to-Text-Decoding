@@ -103,6 +103,7 @@ class BrainTranslator(nn.Module):
 
         if stepone:
             words_embedding = self.deepseek.model.embed_tokens(word_contents_batch)
+            brain_embedding = brain_embedding.to(torch.bfloat16)
             loss = nn.MSELoss()
             return loss(brain_embedding, words_embedding)
         else:
