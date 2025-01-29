@@ -205,88 +205,102 @@ class ZuCo_dataset(Dataset):
         self.inputs = []
         self.tokenizer = tokenizer
 
+        # Enhanced logging and error handling
+        print(f'[DETAILED INFO] Initializing dataset with:')
+        print(f'  Phase: {phase}')
+        print(f'  Subject: {subject}')
+        print(f'  EEG Type: {eeg_type}')
+        print(f'  Bands: {bands}')
+        print(f'  Setting: {setting}')
+        print(f'  Add CLS Token: {is_add_CLS_token}')
+        print(f'  Raw EEG: {raweeg}')
+
         if not isinstance(input_dataset_dicts,list):
             input_dataset_dicts = [input_dataset_dicts]
         print(f'[INFO]loading {len(input_dataset_dicts)} task datasets')
-        for input_dataset_dict in input_dataset_dicts:
+
+        total_processed_samples = 0
+        total_failed_samples = 0
+
+        for dataset_idx, input_dataset_dict in enumerate(input_dataset_dicts):
+            print(f'[DETAILED INFO] Processing dataset {dataset_idx + 1}')
+            
+            # Determine subjects to process
             if subject == 'ALL':
                 subjects = list(input_dataset_dict.keys())
-                print('[INFO]using subjects: ', subjects)
+                print(f'[INFO]using ALL subjects: {subjects}')
             else:
                 subjects = [subject]
             
-            total_num_sentence = len(input_dataset_dict[subjects[0]])
-            
-            train_divider = int(0.8*total_num_sentence)
-            dev_divider = train_divider + int(0.1*total_num_sentence)
-            
-            print(f'train divider = {train_divider}')
-            print(f'dev divider = {dev_divider}')
+            print(f'[DETAILED INFO] Subjects to process: {subjects}')
 
-            if setting == 'unique_sent':
-                # take first 80% as trainset, 10% as dev and 10% as test
-                if phase == 'train':
-                    print('[INFO]initializing a train set...')
-                    for key in subjects:
-                        for i in range(train_divider):
-                            input_sample = get_input_sample(input_dataset_dict[key][i],self.tokenizer,eeg_type,bands = bands, add_CLS_token = is_add_CLS_token, subj=key,raw_eeg=raweeg)
-                            if input_sample is not None:
-                                input_sample['subject']=key
-                                self.inputs.append(input_sample)
-                elif phase == 'dev':
-                    print('[INFO]initializing a dev set...')
-                    for key in subjects:
-                        for i in range(train_divider,dev_divider):
-                            input_sample = get_input_sample(input_dataset_dict[key][i],self.tokenizer,eeg_type,bands = bands, add_CLS_token = is_add_CLS_token, subj=key,raw_eeg=raweeg)
-                            if input_sample is not None:
-                                input_sample['subject']=key
-                                self.inputs.append(input_sample)
-                elif phase == 'all':
-                    print('[INFO]initializing all dataset...')
-                    for key in subjects:
-                        for i in range(int(1*total_num_sentence)):
-                            input_sample = get_input_sample(input_dataset_dict[key][i],self.tokenizer,eeg_type,bands = bands, add_CLS_token = is_add_CLS_token, subj=key,raw_eeg=raweeg)
-                            if input_sample is not None:
-                                input_sample['subject']=key
-                                self.inputs.append(input_sample)
-                elif phase == 'test':
-                    print('[INFO]initializing a test set...')
-                    for key in subjects:
-                        for i in range(dev_divider,total_num_sentence):
-                            input_sample = get_input_sample(input_dataset_dict[key][i],self.tokenizer,eeg_type,bands = bands, add_CLS_token = is_add_CLS_token, subj=key,raw_eeg=raweeg)
-                            if input_sample is not None:
-                                input_sample['subject']=key
-                                self.inputs.append(input_sample)
-            elif setting == 'unique_subj':
-                print('WARNING!!! only implemented for SR v1 dataset ')
-                # subject ['ZAB', 'ZDM', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW'] for train
-                # subject ['ZMG'] for dev
-                # subject ['ZPH'] for test
-                if phase == 'train':
-                    print(f'[INFO]initializing a train set using {setting} setting...')
-                    for i in range(total_num_sentence):
-                        for key in ['ZAB', 'ZDM', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH','ZKW']:
-                            input_sample = get_input_sample(input_dataset_dict[key][i],self.tokenizer,eeg_type,bands = bands, add_CLS_token = is_add_CLS_token, subj=key)
-                            if input_sample is not None:
-                                self.inputs.append(input_sample)
-                if phase == 'dev':
-                    print(f'[INFO]initializing a dev set using {setting} setting...')
-                    for i in range(total_num_sentence):
-                        for key in ['ZMG']:
-                            input_sample = get_input_sample(input_dataset_dict[key][i],self.tokenizer,eeg_type,bands = bands, add_CLS_token = is_add_CLS_token, subj=key)
-                            if input_sample is not None:
-                                self.inputs.append(input_sample)
-                if phase == 'test':
-                    print(f'[INFO]initializing a test set using {setting} setting...')
-                    for i in range(total_num_sentence):
-                        for key in ['ZPH']:
-                            input_sample = get_input_sample(input_dataset_dict[key][i],self.tokenizer,eeg_type,bands = bands, add_CLS_token = is_add_CLS_token, subj=key)
-                            if input_sample is not None:
-                                self.inputs.append(input_sample)
-            print('++ adding task to dataset, now we have:', len(self.inputs))
+            # Validate input dataset
+            for subj in subjects:
+                if subj not in input_dataset_dict:
+                    print(f'[WARNING] Subject {subj} not found in dataset')
+                    continue
 
-        #print('[INFO]input tensor size:', self.inputs[0]['input_embeddings'].size())
-        #print()
+                subject_data = input_dataset_dict[subj]
+                total_num_sentence = len(subject_data)
+                
+                print(f'[DETAILED INFO] Subject {subj}: Total sentences = {total_num_sentence}')
+
+                train_divider = int(0.8*total_num_sentence)
+                dev_divider = train_divider + int(0.1*total_num_sentence)
+                
+                print(f'[DETAILED INFO] Dividers - Train: {train_divider}, Dev: {dev_divider}, Test: {total_num_sentence}')
+
+                if setting == 'unique_sent':
+                    # Determine range of sentences based on phase
+                    if phase == 'train':
+                        sentence_range = range(train_divider)
+                        print(f'[INFO]initializing train set for {subj}')
+                    elif phase == 'dev':
+                        sentence_range = range(train_divider, dev_divider)
+                        print(f'[INFO]initializing dev set for {subj}')
+                    elif phase == 'all':
+                        sentence_range = range(total_num_sentence)
+                        print(f'[INFO]initializing all dataset for {subj}')
+                    elif phase == 'test':
+                        sentence_range = range(dev_divider, total_num_sentence)
+                        print(f'[INFO]initializing test set for {subj}')
+                    else:
+                        print(f'[ERROR] Invalid phase: {phase}')
+                        continue
+
+                    # Process sentences in the determined range
+                    for i in sentence_range:
+                        try:
+                            input_sample = get_input_sample(
+                                subject_data[i], 
+                                self.tokenizer, 
+                                eeg_type, 
+                                bands=bands, 
+                                add_CLS_token=is_add_CLS_token, 
+                                subj=subj, 
+                                raw_eeg=raweeg
+                            )
+                            
+                            if input_sample is not None:
+                                input_sample['subject'] = subj
+                                self.inputs.append(input_sample)
+                                total_processed_samples += 1
+                            else:
+                                total_failed_samples += 1
+                                print(f'[DEBUG] Failed to process sample {i} for subject {subj}')
+                        except Exception as e:
+                            print(f'[ERROR] Failed to process sample {i} for subject {subj}: {e}')
+                            total_failed_samples += 1
+
+        # Final logging
+        print(f'[FINAL SUMMARY]')
+        print(f'  Total processed samples: {total_processed_samples}')
+        print(f'  Total failed samples: {total_failed_samples}')
+        print(f'  Final dataset size: {len(self.inputs)}')
+
+        # Raise an error if no samples were loaded
+        if len(self.inputs) == 0:
+            raise ValueError("No samples could be loaded from the dataset. Please check your data and preprocessing.")
 
     def __len__(self):
         return len(self.inputs)
@@ -302,7 +316,7 @@ class ZuCo_dataset(Dataset):
             input_sample['target_mask'], 
             input_sample['sentiment_label'], 
             input_sample['sent_level_EEG'],
-            input_sample['input_raw_embeddings'],
+            input_sample.get('input_raw_embeddings', []),
             input_sample['word_contents'],
             input_sample['word_contents_attn'],
             input_sample['subject']
