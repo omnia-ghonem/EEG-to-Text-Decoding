@@ -74,14 +74,14 @@ class BrainTranslator(nn.Module):
     def __init__(self, bart_model, input_dim=192, hidden_dim=512, embedding_dim=1024):
         super().__init__()
         
-        # Neural encoder components
+        # Neural encoder components - reduce hidden dimensions
         self.temporal_encoder = TemporalEncoder(
             input_dim=input_dim,
-            hidden_dim=hidden_dim
+            hidden_dim=hidden_dim // 2  # Reduced from 512 to 256
         )
         
         self.projection = nn.Sequential(
-            nn.Linear(hidden_dim * 2, embedding_dim),
+            nn.Linear(hidden_dim, embedding_dim),  # Reduced input dim
             nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(embedding_dim, embedding_dim),
@@ -91,11 +91,13 @@ class BrainTranslator(nn.Module):
         self.transformer_encoder = TransformerEncoder(
             d_model=embedding_dim,
             nhead=8,
-            num_layers=6
+            num_layers=4  # Reduced from 6 to 4 layers
         )
         
-        # BART components
+        # BART model with gradient checkpointing
         self.bart = bart_model
+        self.bart.config.use_cache = False  # Disable KV caching for training
+        self.bart.gradient_checkpointing_enable()  # Enable gradient checkpointing
         
     def freeze_bart(self):
         """Freeze BART parameters"""
@@ -115,11 +117,15 @@ class BrainTranslator(nn.Module):
         # Get sequence lengths from mask
         lengths = neural_mask.sum(dim=1).cpu()
         
-        # Process through temporal encoder
+        # Process through temporal encoder 
         temporal_features = self.temporal_encoder(neural_data, lengths)
         
         # Project to BART dimension
         projected = self.projection(temporal_features)
+        
+        # Free memory
+        del temporal_features
+        torch.cuda.empty_cache()
         
         # Process through transformer encoder
         encoded = self.transformer_encoder(
@@ -127,14 +133,20 @@ class BrainTranslator(nn.Module):
             mask=(1 - neural_mask).bool()
         )
         
+        # Free memory
+        del projected
+        torch.cuda.empty_cache()
+        
         # Generate text with BART
         if self.training:
-            outputs = self.bart(
-                inputs_embeds=encoded,
-                attention_mask=neural_mask,
-                labels=input_ids,
-                return_dict=True
-            )
+            # Use torch.cuda.amp.autocast() for mixed precision training
+            with torch.cuda.amp.autocast():
+                outputs = self.bart(
+                    inputs_embeds=encoded,
+                    attention_mask=neural_mask,
+                    labels=input_ids,
+                    return_dict=True
+                )
             return outputs.loss, outputs.logits
         else:
             outputs = self.bart.generate(
