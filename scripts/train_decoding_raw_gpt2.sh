@@ -1,6 +1,6 @@
 python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_gpt2.py --model_name BrainTranslator \
     --task_name task1_task2_taskNRv2 \
-    --onw_step \
+    --one_step \
     --pretrained \
     --load_step1_checkpoint \
     --first_run \
