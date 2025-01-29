@@ -13,7 +13,7 @@ python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_new_dataset.py\
     -b 20 \
     -s /kaggle/working/checkpoints/decoding_raw \
     -cuda cuda:0 \
-    --data_dir /kaggle/input/handwriting-bci/handwritingBCIData/Datasets \
+    --data_dir /kaggle/input/handwriting-bci/handwritingBCIData \
     --hidden_dim 512 \
     --embedding_dim 1024 \
     --save_every 5 \
