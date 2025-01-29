@@ -405,7 +405,8 @@ if __name__ == '__main__':
 
     # closely follow GPT-2 recommendation
     if model_name in ['BrainTranslator']:
-        for name, param in model.named_parameters():if param.requires_grad and 'gpt2' in name:
+        for name, param in model.named_parameters():
+            if param.requires_grad and 'gpt2' in name:
                 if ('wte' in name) or ('wpe' in name) or ('h.0' in name):
                     continue
                 else:
