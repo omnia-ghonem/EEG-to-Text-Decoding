@@ -11,6 +11,7 @@ import json
 from glob import glob
 import time
 from tqdm import tqdm
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 from transformers import BartTokenizer, BartForConditionalGeneration, BertTokenizer, BertConfig, BertForSequenceClassification, RobertaTokenizer, RobertaForSequenceClassification
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
