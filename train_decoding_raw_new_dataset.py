@@ -56,15 +56,17 @@ import model_decoding_raw_new_dataset
 class Trainer:
     def __init__(self, args):
         self.args = args
+        
+        # Set up device and mixed precision training
         self.device = torch.device(args.get('cuda', 'cuda') if torch.cuda.is_available() else 'cpu')
+        self.scaler = torch.cuda.amp.GradScaler()  # For mixed precision training
         
-        # Setup paths
+        # Reduce batch size
+        self.args['batch_size'] = 4  # Reduced from original
+        
+        # Initialize components
         self.setup_paths()
-        
-        # Initialize tokenizer and datasets
         self.setup_data()
-        
-        # Create model
         self.setup_model()
         
         # Setup logging
@@ -202,32 +204,48 @@ class Trainer:
         # Final evaluation
         self.evaluate()
 
+
+
     def train_epoch(self):
-        """Train for one epoch"""
+        """Train for one epoch with memory optimization"""
         self.model.train()
         total_loss = 0
         
         with tqdm(self.dataloaders['train'], desc='Training') as pbar:
-            for batch in pbar:
+            for batch_idx, batch in enumerate(pbar):
                 # Move data to device
                 neural_data = batch['neural_data'].to(self.device)
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
                 neural_mask = batch['neural_mask'].to(self.device)
                 
-                # Forward pass
-                self.optimizer.zero_grad()
-                loss, _ = self.model(neural_data, neural_mask, input_ids, attention_mask)
+                # Clear gradients
+                self.optimizer.zero_grad(set_to_none=True)  # More memory efficient
                 
-                # Backward pass
-                loss.backward()
+                # Forward pass with mixed precision
+                with torch.cuda.amp.autocast():
+                    loss, _ = self.model(neural_data, neural_mask, input_ids, attention_mask)
+                
+                # Backward pass with gradient scaling
+                self.scaler.scale(loss).backward()
+                self.scaler.unscale_(self.optimizer)
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                self.optimizer.step()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
                 
                 # Update metrics
                 total_loss += loss.item()
                 pbar.set_postfix({'loss': loss.item()})
                 
+                # Clear memory
+                del neural_data, input_ids, attention_mask, neural_mask, loss
+                torch.cuda.empty_cache()
+                
+                # Optional: gradient accumulation for larger effective batch size
+                if (batch_idx + 1) % self.args.get('gradient_accumulation_steps', 1) == 0:
+                    self.optimizer.step()
+                    self.optimizer.zero_grad(set_to_none=True)
+        
         return total_loss / len(self.dataloaders['train'])
 
     def validate(self):
