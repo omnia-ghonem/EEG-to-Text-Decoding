@@ -16,36 +16,26 @@ from rouge import Rouge
 from bert_score import score
 from torch.nn.utils.rnn import pad_sequence
 import warnings
+from pathlib import Path
+
+# Configure warnings and logging
 warnings.filterwarnings('ignore')
-from transformers import logging
-logging.set_verbosity_error()
-import sys
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_new_dataset.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_new_dataset.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config_new_dataset.py')
-for path in sys.path:
-    print(path)
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('training.log')
+    ]
+)
 
-
-
-import data_raw_new_dataset 
-import config_new_dataset
-import model_decoding_raw_new_dataset
-from nltk.translate.bleu_score import corpus_bleu
-from rouge import Rouge
-from bert_score import score
-
-
-warnings.filterwarnings('ignore')
+# Import transformers logging after basic config
 from transformers import logging as transformers_logging
 transformers_logging.set_verbosity_error()
-torch.autograd.set_detect_anomaly(True)
 
-# Configure Python's logging
-python_logging.basicConfig(
-    level=python_logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# Enable autograd anomaly detection
+torch.autograd.set_detect_anomaly(True)
 
 # Set up tensorboard logging
 from torch.utils.tensorboard import SummaryWriter
@@ -53,6 +43,15 @@ LOG_DIR = "runs_handwriting"
 train_writer = SummaryWriter(os.path.join(LOG_DIR, "train"))
 val_writer = SummaryWriter(os.path.join(LOG_DIR, "train_full"))
 dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
+
+# Add paths for custom modules
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_new_dataset.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_new_dataset.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config_new_dataset.py')
+
+import data_raw_new_dataset 
+import config_new_dataset
+import model_decoding_raw_new_dataset
 
 class Trainer:
     def __init__(self, args):
@@ -316,7 +315,5 @@ if __name__ == '__main__':
     # Create trainer and start training
     trainer = Trainer(args)
     trainer.train()
-
-
 
     print("\nTraining complete!")
