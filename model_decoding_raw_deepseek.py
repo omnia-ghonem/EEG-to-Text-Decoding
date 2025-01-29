@@ -3,13 +3,11 @@ import torch.nn.functional as F
 import torch.utils.data
 from torch.nn.utils.rnn import pack_padded_sequence
 from transformers import AutoTokenizer, AutoModelForCausalLM
+
+
+
 class ProjectionHead(nn.Module):
-    def __init__(
-        self,
-        embedding_dim,
-        projection_dim=768,  # Changed to match GPT2's embedding dimension
-        dropout=0.1
-    ):
+    def __init__(self, embedding_dim, projection_dim=768, dropout=0.1):
         super().__init__()
         self.projection = nn.Linear(embedding_dim, projection_dim)
         self.gelu = nn.GELU()
@@ -25,7 +23,8 @@ class ProjectionHead(nn.Module):
         return x
 
 class BrainTranslator(nn.Module):
-    def __init__(self, deepseek, in_feature=1024, decoder_embedding_size=4096, additional_encoder_nhead=32, additional_encoder_dim_feedforward=16384):
+    def __init__(self, deepseek, in_feature=1024, decoder_embedding_size=4096, 
+                 additional_encoder_nhead=32, additional_encoder_dim_feedforward=16384):
         super(BrainTranslator, self).__init__()
         
         # Embedded EEG raw features
@@ -37,7 +36,8 @@ class BrainTranslator(nn.Module):
         self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
 
         SUBJECTS = ['ZAB', 'ZDM', 'ZDN', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW', 'ZMG', 'ZPH', 
-            'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
+                   'YSD', 'YFS', 'YMD', 'YAC', 'YFR', 'YHS', 'YLS', 'YDG', 'YRH', 'YRK', 'YMS', 'YIS', 
+                   'YTL', 'YSL', 'YRP', 'YAG', 'YDR', 'YAK']
         self.subjects_map_id = {subject: idx for idx, subject in enumerate(SUBJECTS)}
         
         # learnable subject matrices
@@ -55,25 +55,26 @@ class BrainTranslator(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-5)
-
-        # Changed projection dimension to match GPT2's embedding size (768)
         self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=768, dropout=0.2)
         
-        # GPT2
-        self.deepseek = deepseek        
+        # Language Model
+        self.deepseek = deepseek
+
     def freeze_pretrained_bart(self):
         for name, param in self.named_parameters():
             param.requires_grad = True
-            if 'gpt2' in name:
+            if 'deepseek' in name:
                 param.requires_grad = False
 
     def freeze_pretrained_brain(self):
         for name, param in self.named_parameters():
             param.requires_grad = False
-            if 'gpt2' in name:
+            if 'deepseek' in name:
                 param.requires_grad = True
 
-    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch_converted, lenghts_words, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device, features=False):
+    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, 
+                target_ids_batch_converted, lenghts_words, word_contents_batch, 
+                word_contents_attn_batch, stepone, subject_batch, device, features=False):
         feature_embedding = self.feature_embedded(input_embeddings_batch, lenghts_words, device)
         if len(feature_embedding.shape) == 2:
             feature_embedding = torch.unsqueeze(feature_embedding, 0)
@@ -98,12 +99,9 @@ class BrainTranslator(nn.Module):
         brain_embedding = encoded_embedding_subject + self.pos_embedding
         brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
         brain_embedding = self.layernorm_embedding(brain_embedding)
-        
-        # Project to GPT2's embedding dimension (768)
         brain_embedding = self.brain_projection(brain_embedding)
 
         if stepone:
-          
             words_embedding = self.deepseek.model.embed_tokens(word_contents_batch)
             loss = nn.MSELoss()
             return loss(brain_embedding, words_embedding)
@@ -118,11 +116,9 @@ class BrainTranslator(nn.Module):
                 return out.logits, brain_embedding
             return out.logits
 
-
 class FeatureEmbedded(nn.Module):
     def __init__(self, input_dim=105, hidden_dim=512, num_layers=2, is_bidirectional=True):
-        super(FeatureEmbedded, self).__init__()
-
+        super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -162,7 +158,6 @@ class FeatureEmbedded(nn.Module):
             for i in range(lenghts_sentence.shape[0]):
                 sentence_embedding.append(lstm_outs[int(lenghts_sentence[i]-1), i, :])
             sentence_embedding = torch.stack(sentence_embedding, 0)
-
             sentence_embedding_batch.append(sentence_embedding)
 
         return torch.squeeze(torch.stack(sentence_embedding_batch, 0)).to(device)
