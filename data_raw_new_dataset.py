@@ -42,66 +42,108 @@ class HandwritingBCIDataset(Dataset):
         self.max_seq_len = max_seq_len
         self.min_seq_len = min_seq_len
         
+        # Default session IDs
         if session_ids is None:
-            session_ids = [
-                't5.2019.05.08', 't5.2019.11.25', 't5.2019.12.09',
-                't5.2019.12.11', 't5.2019.12.18', 't5.2019.12.20',
-                't5.2020.01.06', 't5.2020.01.08', 't5.2020.01.13',
-                't5.2020.01.15'
+            self.session_ids = [
+                '2019.05.08', '2019.11.25', '2019.12.09',
+                '2019.12.11', '2019.12.18', '2019.12.20',
+                '2020.01.06', '2020.01.08', '2020.01.13',
+                '2020.01.15'
             ]
-        self.session_ids = session_ids
+        else:
+            self.session_ids = session_ids
+        
+        logging.info(f"Initializing {phase} dataset from {root_dir}")
+        logging.info(f"Using sessions: {self.session_ids}")
+        
+        # Input validation
+        if not self.root_dir.exists():
+            raise FileNotFoundError(f"Root directory does not exist: {self.root_dir}")
+            
+        dataset_dir = self.root_dir / 'Datasets'
+        if not dataset_dir.exists():
+            raise FileNotFoundError(f"Datasets directory not found at: {dataset_dir}")
         
         self.inputs = []
         self._load_all_sessions()
         
+        if len(self.inputs) == 0:
+            raise ValueError(f"No valid samples found for {phase} set. Please check the data directory and session IDs.")
+            
         logging.info(f"Loaded {len(self.inputs)} samples for {phase} set")
 
     def _load_all_sessions(self):
         """Load data from all specified sessions"""
         for session_id in self.session_ids:
-            self._load_session(session_id)
+            try:
+                self._load_session(session_id)
+                logging.info(f"Successfully loaded session: {session_id}")
+            except Exception as e:
+                logging.error(f"Error loading session {session_id}: {str(e)}")
+                continue  # Continue with next session even if one fails
 
     def _load_session(self, session_id: str):
         """Load data from a single session"""
         try:
+            # Construct full session path
             session_dir = self.root_dir / 'Datasets' / session_id
+            sentences_file = session_dir / 'sentences.mat'
+            
+            if not sentences_file.exists():
+                logging.warning(f"Sentences file not found at: {sentences_file}")
+                return
             
             # Load sentence data
-            sentence_data = loadmat(str(session_dir / 'sentences.mat'))
+            sentence_data = loadmat(str(sentences_file))
+            logging.info(f"Loaded sentences.mat from {session_id}")
             
             # Get splits
             total_sentences = len(sentence_data['sentencePrompt'])
             train_split = int(0.8 * total_sentences)
             dev_split = train_split + int(0.1 * total_sentences)
             
+            logging.info(f"Session {session_id}: Total sentences = {total_sentences}")
+            
             # Select appropriate slice based on phase
             if self.phase == 'train':
                 start_idx, end_idx = 0, train_split
             elif self.phase == 'dev':
                 start_idx, end_idx = train_split, dev_split
-            else:
+            else:  # test
                 start_idx, end_idx = dev_split, total_sentences
 
+            processed_count = 0
+            excluded_count = 0
+            
             # Process each sentence
             for idx in range(start_idx, end_idx):
                 if 'excludedSentences' in sentence_data and sentence_data['excludedSentences'][idx][0]:
+                    excluded_count += 1
                     continue
                     
                 sample = self._process_sentence(sentence_data, idx)
                 if sample is not None:
                     self.inputs.append(sample)
+                    processed_count += 1
+                
+            logging.info(f"Session {session_id}: Processed {processed_count} samples, "
+                        f"excluded {excluded_count} samples")
                     
         except Exception as e:
-            logging.error(f"Error loading session {session_id}: {str(e)}")
+            logging.error(f"Error processing session {session_id}: {str(e)}")
+            raise
 
     def _process_sentence(self, sentence_data: Dict, idx: int) -> Optional[Dict]:
         """Process a single sentence and its neural data"""
         try:
             # Get sentence text
-            if 'intendedText' in sentence_data:
+            if 'intendedText' in sentence_data and sentence_data['intendedText'][idx][0].size > 0:
                 text = str(sentence_data['intendedText'][idx][0][0])
-            else:
+            elif 'sentencePrompt' in sentence_data and sentence_data['sentencePrompt'][idx][0].size > 0:
                 text = str(sentence_data['sentencePrompt'][idx][0][0])
+            else:
+                logging.warning(f"No text found for index {idx}")
+                return None
             
             # Clean text
             text = text.replace('>', ' ').replace('~', '.').replace('#', '').strip()
@@ -114,6 +156,7 @@ class HandwritingBCIDataset(Dataset):
             
             # Skip if sequence too short
             if seq_len < self.min_seq_len:
+                logging.debug(f"Skipping sequence with length {seq_len} < {self.min_seq_len}")
                 return None
             
             # Preprocess neural data
@@ -147,7 +190,7 @@ class HandwritingBCIDataset(Dataset):
         except Exception as e:
             logging.warning(f"Failed to process sentence {idx}: {str(e)}")
             return None
-            
+
     def _create_neural_mask(self, seq_len: int) -> torch.Tensor:
         """Create attention mask for neural data"""
         mask = torch.zeros(self.max_seq_len)
@@ -177,7 +220,6 @@ class HandwritingBCIDataset(Dataset):
             'seq_len': sample['seq_len'],
             'text': sample['text']
         }
-
 def collate_fn(batch: List[Dict]) -> Dict:
     """Collate function for DataLoader"""
     return {
