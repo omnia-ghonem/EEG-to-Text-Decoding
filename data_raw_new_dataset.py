@@ -8,16 +8,13 @@ from typing import List, Dict, Optional, Tuple
 import warnings
 
 class HandwritingBCIDataset(Dataset):
-    """Dataset class for loading and processing handwriting BCI data."""
-    
-    def __init__(self, data_paths: List[str], phase: str, tokenizer, max_len: int = 56):
+    def __init__(self, session_paths, phase, tokenizer, max_len=56):
         """
         Initialize the HandwritingBCI dataset.
-        
         Args:
-            data_paths: List of paths to session data directories
-            phase: One of 'train', 'dev', or 'test'
-            tokenizer: BART tokenizer for text processing
+            session_paths: List of paths to session data files
+            phase: 'train', 'dev', or 'test' 
+            tokenizer: BART tokenizer
             max_len: Maximum sequence length for padding
         """
         self.inputs = []
@@ -26,80 +23,66 @@ class HandwritingBCIDataset(Dataset):
         
         print(f"[INFO] Initializing {phase} dataset...")
         
-        for session_path in data_paths:
-            self._load_session_data(session_path, phase)
-            
+        # Process each session
+        for session_path in session_paths:
+            try:
+                # Load sentence data
+                sentence_data = loadmat(os.path.join(session_path, 'sentences.mat'))
+                
+                # Get total number of sentences
+                total_sentences = len(sentence_data['sentencePrompt'])
+                train_split = int(0.8 * total_sentences)
+                dev_split = train_split + int(0.1 * total_sentences)
+                
+                # Select appropriate slice based on phase
+                start_idx = 0
+                end_idx = total_sentences
+                if phase == 'train':
+                    end_idx = train_split
+                elif phase == 'dev':
+                    start_idx = train_split
+                    end_idx = dev_split
+                elif phase == 'test':
+                    start_idx = dev_split
+
+                # Process sentences in the selected range
+                for idx in range(start_idx, end_idx):
+                    # Skip excluded sentences
+                    if 'excludedSentences' in sentence_data and sentence_data['excludedSentences'][idx][0]:
+                        continue
+                        
+                    input_sample = self._process_sentence(sentence_data, idx)
+                    if input_sample is not None:
+                        self.inputs.append(input_sample)
+                        
+            except Exception as e:
+                print(f"[ERROR] Failed to load session {session_path}: {str(e)}")
+
         print(f"[INFO] Loaded {len(self.inputs)} samples for {phase}")
 
-    def _load_session_data(self, session_path: str, phase: str):
-        """
-        Load and process data from a single session.
-        
-        Args:
-            session_path: Path to session data directory
-            phase: Dataset split to load ('train', 'dev', or 'test')
-        """
+    def _process_sentence(self, sentence_data, idx):
+        """Process a single sentence and its neural data"""
         try:
-            # Load sentence data
-            sentences_file = os.path.join(session_path, 'sentences.mat')
-            if not os.path.exists(sentences_file):
-                print(f"[WARNING] Sentences file not found at {sentences_file}")
-                return
-                
-            sentence_data = loadmat(sentences_file)
-            
-            # Get total number of sentences
-            total_sentences = len(sentence_data['sentencePrompt'])
-            train_split = int(0.8 * total_sentences)
-            dev_split = train_split + int(0.1 * total_sentences)
-            
-            # Select appropriate slice based on phase
-            start_idx = 0
-            end_idx = total_sentences
-            if phase == 'train':
-                end_idx = train_split
-            elif phase == 'dev':
-                start_idx = train_split
-                end_idx = dev_split
-            elif phase == 'test':
-                start_idx = dev_split
-            
-            # Process each sentence in the selected range
-            for idx in range(start_idx, end_idx):
-                # Skip excluded sentences
-                if 'excludedSentences' in sentence_data and sentence_data['excludedSentences'][idx]:
-                    continue
-                    
-                input_sample = self._process_sentence(sentence_data, idx)
-                if input_sample is not None:
-                    self.inputs.append(input_sample)
-                    
-        except Exception as e:
-            print(f"[ERROR] Failed to load session {session_path}: {str(e)}")
+            # Get sentence text - handle MATLAB string array format
+            if 'intendedText' in sentence_data:
+                text = sentence_data['intendedText'][idx][0]
+                if isinstance(text, np.ndarray):
+                    text = str(text[0])
+            else:
+                text = sentence_data['sentencePrompt'][idx][0]
+                if isinstance(text, np.ndarray):
+                    text = str(text[0])
 
-    def _process_sentence(self, sentence_data: Dict, idx: int) -> Optional[Dict]:
-        """
-        Process a single sentence and its corresponding neural data.
-        
-        Args:
-            sentence_data: Dictionary containing sentence and neural data
-            idx: Index of sentence to process
+            # Convert special characters if needed
+            text = text.replace('>', ' ').replace('~', '.').strip()
             
-        Returns:
-            Dictionary containing processed input sample or None if processing fails
-        """
-        try:
-            # Get sentence text
-            intended_text = sentence_data['intendedText'][idx][0] if 'intendedText' in sentence_data else sentence_data['sentencePrompt'][idx][0]
-            
-            # Get neural data (dimensions: time steps x electrodes)
+            # Get neural data
             neural_data = sentence_data['neuralActivityCube'][idx]
-            
-            # Get sequence length
-            seq_len = sentence_data['numTimeBinsPerSentence'][idx][0]
-            
-            # Truncate neural data to actual sequence length
-            neural_data = neural_data[:seq_len]
+            if isinstance(neural_data, np.ndarray):
+                seq_len = sentence_data['numTimeBinsPerSentence'][idx][0]
+                if isinstance(seq_len, np.ndarray):
+                    seq_len = int(seq_len[0])
+                neural_data = neural_data[:seq_len]
             
             # Convert to torch tensor and normalize
             neural_data = torch.from_numpy(neural_data).float()
@@ -107,25 +90,25 @@ class HandwritingBCIDataset(Dataset):
             
             # Tokenize target text
             target_tokenized = self.tokenizer(
-                intended_text,
+                text,
                 padding='max_length',
                 max_length=self.max_len,
                 truncation=True,
                 return_tensors='pt',
                 return_attention_mask=True
             )
-            
+
             # Create attention masks
-            attention_mask = torch.zeros(self.max_len)  # 0 is masked
-            attention_mask[:min(seq_len, self.max_len)] = 1  # 1 is not masked
-            attention_mask_invert = 1 - attention_mask  # Inverted for transformer
-            
+            attn_mask = torch.zeros(self.max_len)  # 0 is masked
+            attn_mask[:min(seq_len, self.max_len)] = 1  # 1 is not masked
+            attn_mask_invert = 1 - attn_mask  # Inverted for transformer
+
             # Create input sample dictionary
             input_sample = {
                 'input_embeddings': neural_data,
                 'seq_len': seq_len,
-                'input_attn_mask': attention_mask,
-                'input_attn_mask_invert': attention_mask_invert,
+                'input_attn_mask': attn_mask,
+                'input_attn_mask_invert': attn_mask_invert,
                 'target_ids': target_tokenized['input_ids'][0],
                 'target_mask': target_tokenized['attention_mask'][0],
                 'sentiment_label': torch.tensor(0),  # Placeholder
@@ -134,51 +117,31 @@ class HandwritingBCIDataset(Dataset):
                 'word_contents_attn': target_tokenized['attention_mask'][0],
                 'subject': 'T5'  # Single subject in dataset
             }
-            
+
             # Add padding if needed
             if seq_len < self.max_len:
                 padding = torch.zeros(self.max_len - seq_len, neural_data.shape[1])
                 input_sample['input_embeddings'] = torch.cat([neural_data, padding], dim=0)
             else:
                 input_sample['input_embeddings'] = neural_data[:self.max_len]
-            
+                
             return input_sample
-            
+
         except Exception as e:
             print(f"[WARNING] Failed to process sentence {idx}: {str(e)}")
             return None
 
-    def _normalize_neural_data(self, neural_data: torch.Tensor) -> torch.Tensor:
-        """
-        Normalize neural data using z-score normalization.
-        
-        Args:
-            neural_data: Tensor of neural activity data
-            
-        Returns:
-            Normalized neural data tensor
-        """
+    def _normalize_neural_data(self, neural_data):
+        """Normalize neural data by z-scoring"""
         mean = torch.mean(neural_data, dim=0, keepdim=True)
         std = torch.std(neural_data, dim=0, keepdim=True)
         return (neural_data - mean) / (std + 1e-8)
 
-    def __len__(self) -> int:
-        """Return the number of samples in the dataset."""
+    def __len__(self):
         return len(self.inputs)
 
-    def __getitem__(self, idx: int) -> Tuple:
-        """
-        Get a single sample from the dataset.
-        
-        Args:
-            idx: Index of sample to retrieve
-            
-        Returns:
-            Tuple containing all necessary data for model training/inference
-        """
+    def __getitem__(self, idx):
         input_sample = self.inputs[idx]
-        
-        # Return tuple matching the expected format of the model
         return (
             input_sample['input_embeddings'],
             input_sample['seq_len'],
@@ -188,12 +151,11 @@ class HandwritingBCIDataset(Dataset):
             input_sample['target_mask'],
             input_sample['sentiment_label'],
             input_sample['sent_level_EEG'],
-            input_sample['input_embeddings'].unsqueeze(0),  # Raw embeddings
+            input_sample['input_embeddings'].unsqueeze(0),
             input_sample['word_contents'],
             input_sample['word_contents_attn'],
             input_sample['subject']
         )
-
 def collate_fn(batch):
     """
     Custom collate function for DataLoader.
