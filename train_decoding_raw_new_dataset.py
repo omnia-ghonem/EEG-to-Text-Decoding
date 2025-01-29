@@ -89,7 +89,7 @@ class Trainer:
         # Create datasets
         self.datasets = {
             phase: data_raw_new_dataset.HandwritingBCIDataset(
-                root_dir=self.args['data_root'],
+                root_dir=self.args['data_dir'],
                 phase=phase,
                 tokenizer=self.tokenizer,
                 session_ids=self.args.get('session_ids', None)
