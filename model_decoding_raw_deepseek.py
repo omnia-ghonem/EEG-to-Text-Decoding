@@ -55,7 +55,7 @@ class BrainTranslator(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-5)
-        self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=768, dropout=0.2)
+        self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=4096, dropout=0.2)
         
         # Language Model
         self.deepseek = deepseek
