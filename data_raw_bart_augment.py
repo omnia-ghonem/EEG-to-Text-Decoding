@@ -170,23 +170,42 @@ class EEGAugmentor:
 
 def augment_zuco_dataset(dataset_dict, augmentor, num_augmentations=1):
     """Augment the ZuCo dataset with various EEG transformations"""
+    if not dataset_dict:
+        print("[WARNING] Empty dataset dictionary provided")
+        return {}
+        
     augmented_dict = {}
     
     for subject, sentences in dataset_dict.items():
+        if not sentences:  # Skip if sentences is empty
+            print(f"[WARNING] Empty sentences list for subject {subject}")
+            continue
+            
         try:
             augmented_dict[subject] = []
+            # Create a deep copy of original sentences to avoid modifying them
             augmented_dict[subject].extend(sentences)
             
             for sentence in sentences:
+                if not sentence or 'word' not in sentence:  # Skip invalid sentences
+                    print(f"[WARNING] Invalid sentence structure for subject {subject}")
+                    continue
+                    
                 for aug_idx in range(num_augmentations):
                     try:
+                        # Create a deep copy of the sentence to avoid modifying original
                         aug_sentence = dict(sentence)
-                        
+                        if not isinstance(aug_sentence.get('word', None), (list, tuple)):
+                            print(f"[WARNING] Invalid word structure in sentence")
+                            continue
+                            
                         for word in aug_sentence['word']:
+                            if not isinstance(word, dict):
+                                continue
+                                
                             # Augment word-level EEG
-                            if 'word_level_EEG' in word:
+                            if 'word_level_EEG' in word and word['word_level_EEG']:
                                 for eeg_type in word['word_level_EEG']:
-                                    for band in word['word_level_EEG'][eeg_type]:
                                         try:
                                             eeg_data = np.array(word['word_level_EEG'][eeg_type][band])
                                             
