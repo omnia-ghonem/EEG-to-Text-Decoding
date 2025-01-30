@@ -125,12 +125,11 @@ class BrainTranslator(nn.Module):
             if 'deepseek' in name:
                 param.requires_grad = True
 
-    def _expand_mask(self, mask):
-        """Convert 1D attention mask to 2D attention mask"""
-        bsz = mask.size(0)
-        seq_len = mask.size(1)
-        mask_2d = mask.unsqueeze(1).expand(bsz, seq_len, seq_len)
-        return mask_2d.bool()
+    def _create_attention_mask(self, input_mask_invert):
+        """Convert input mask to transformer's attention mask format"""
+        # input_mask_invert is [batch_size, seq_len]
+        # need to return [batch_size, seq_len] where True means to mask
+        return input_mask_invert
 
     def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, 
                 target_ids_batch_converted, lenghts_words, word_contents_batch, 
@@ -164,10 +163,9 @@ class BrainTranslator(nn.Module):
 
         brain_embedding = encoded_embedding_subject + self.pos_embedding
         
-        # Create attention mask for transformer
+        # Create proper attention mask for transformer
         if input_masks_invert is not None:
-            # Convert mask from [batch_size, seq_len] to [batch_size, seq_len, seq_len]
-            attention_mask = ~self._expand_mask(input_masks_invert)
+            attention_mask = self._create_attention_mask(input_masks_invert)
         else:
             attention_mask = None
 
