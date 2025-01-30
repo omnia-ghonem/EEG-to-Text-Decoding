@@ -1,4 +1,4 @@
-python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw.py --model_name BrainTranslator \
+python /kaggle/working/EEG-to-Text-Decoding/train_decoding_raw_gpt2_bart.py --model_name BrainTranslator \
     --task_name task1_task2_taskNRv2 \
     --one_step \
     --pretrained \
