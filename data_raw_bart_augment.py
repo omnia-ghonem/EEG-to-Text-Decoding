@@ -27,6 +27,7 @@ ZUCO_SENTIMENT_LABELS = json.load(open('/kaggle/input/dataset/ZuCo/task1-SR/sent
 SST_SENTIMENT_LABELS = json.load(open('/kaggle/input/dataset/stanfordsentiment/stanfordSentimentTreebank/ternary_dataset.json'))
 
 def butter_bandpass_filter(signal, lowcut, highcut, fs=500, order=5):
+    """Apply bandpass filter to the signal"""
     nyq = 0.5 * fs
     low = lowcut/nyq
     high = highcut/nyq
@@ -35,6 +36,7 @@ def butter_bandpass_filter(signal, lowcut, highcut, fs=500, order=5):
     return torch.Tensor(y).float()
 
 def normalize_1d(input_tensor):
+    """Normalize 1D tensor"""
     mean = torch.mean(input_tensor)
     std = torch.std(input_tensor)
     input_tensor = (input_tensor - mean)/std
@@ -42,53 +44,184 @@ def normalize_1d(input_tensor):
 
 class EEGAugmentor:
     def __init__(self, noise_level=0.1, scaling_factor=0.2, shift_limit=0.1, 
-                 dropout_rate=0.1, permutation_segments=5, mask_size=0.1):
+                 dropout_rate=0.1, permutation_segments=5, mask_size=0.1,
+                 freq_shift_range=0.1, amplitude_scale_range=0.2):
         self.noise_level = noise_level
         self.scaling_factor = scaling_factor
         self.shift_limit = shift_limit
         self.dropout_rate = dropout_rate
         self.permutation_segments = permutation_segments
         self.mask_size = mask_size
+        self.freq_shift_range = freq_shift_range
+        self.amplitude_scale_range = amplitude_scale_range
     
     def add_gaussian_noise(self, eeg_data):
+        """Add Gaussian noise to EEG data"""
         noise = np.random.normal(0, self.noise_level, eeg_data.shape)
         return eeg_data + noise
 
     def scaling(self, eeg_data):
+        """Scale EEG data by a random factor"""
         scale_factor = 1.0 + random.uniform(-self.scaling_factor, self.scaling_factor)
         return eeg_data * scale_factor
     
     def time_shift(self, eeg_data):
+        """Shift EEG data in time domain"""
         shift_points = int(len(eeg_data) * random.uniform(-self.shift_limit, self.shift_limit))
         return np.roll(eeg_data, shift_points, axis=0)
     
     def channel_dropout(self, eeg_data):
+        """Randomly drop out channels"""
         mask = np.random.binomial(1, 1-self.dropout_rate, eeg_data.shape)
         return eeg_data * mask
     
     def temporal_permutation(self, eeg_data):
+        """Permute temporal segments of EEG data"""
+        if len(eeg_data) == 0:
+            return eeg_data
+            
         segment_length = len(eeg_data) // self.permutation_segments
+        if segment_length == 0:
+            return eeg_data
+            
         segments = [eeg_data[i:i+segment_length] for i in range(0, len(eeg_data), segment_length)]
         if len(segments[-1]) < segment_length:
             segments = segments[:-1]
-        if segments:  # Only shuffle if there are segments
+        if segments:
             random.shuffle(segments)
             return np.concatenate(segments)
         return eeg_data
     
     def masking(self, eeg_data):
-        if len(eeg_data) > 0:  # Check if data is not empty
+        """Mask segments of EEG data"""
+        if len(eeg_data) > 0:
             mask_length = max(1, int(len(eeg_data) * self.mask_size))
             start_idx = random.randint(0, len(eeg_data) - mask_length)
-            masked_data = eeg_data.copy()  # Create a copy to avoid modifying original
+            masked_data = eeg_data.copy()
             masked_data[start_idx:start_idx+mask_length] = 0
             return masked_data
         return eeg_data
 
+    def frequency_shift(self, eeg_data):
+        """Shift frequency components of EEG data"""
+        try:
+            if len(eeg_data) == 0:
+                return eeg_data
+                
+            # Apply FFT
+            fft_data = np.fft.fft(eeg_data)
+            freqs = np.fft.fftfreq(len(eeg_data))
+            
+            # Random frequency shift
+            shift = random.uniform(-self.freq_shift_range, self.freq_shift_range)
+            shifted_freqs = freqs + shift
+            
+            # Interpolate to get shifted spectrum
+            interpolator = interp1d(freqs, fft_data, bounds_error=False, fill_value=0)
+            shifted_fft = interpolator(shifted_freqs)
+            
+            # Inverse FFT
+            shifted_data = np.fft.ifft(shifted_fft).real
+            return shifted_data
+            
+        except Exception as e:
+            print(f"Warning: Error in frequency shift: {e}")
+            return eeg_data
+
+    def amplitude_scale(self, eeg_data):
+        """Scale amplitude of EEG data non-uniformly"""
+        try:
+            if len(eeg_data) == 0:
+                return eeg_data
+                
+            scale = 1.0 + random.uniform(-self.amplitude_scale_range, self.amplitude_scale_range)
+            scaled_data = np.power(np.abs(eeg_data), scale) * np.sign(eeg_data)
+            return scaled_data
+            
+        except Exception as e:
+            print(f"Warning: Error in amplitude scaling: {e}")
+            return eeg_data
+
+def augment_zuco_dataset(dataset_dict, augmentor, num_augmentations=1):
+    """Augment the ZuCo dataset with various EEG transformations"""
+    augmented_dict = {}
+    
+    for subject, sentences in dataset_dict.items():
+        try:
+            augmented_dict[subject] = []
+            augmented_dict[subject].extend(sentences)
+            
+            for sentence in sentences:
+                for aug_idx in range(num_augmentations):
+                    try:
+                        aug_sentence = dict(sentence)
+                        
+                        for word in aug_sentence['word']:
+                            # Augment word-level EEG
+                            if 'word_level_EEG' in word:
+                                for eeg_type in word['word_level_EEG']:
+                                    for band in word['word_level_EEG'][eeg_type]:
+                                        try:
+                                            eeg_data = np.array(word['word_level_EEG'][eeg_type][band])
+                                            
+                                            # Apply random augmentations with probabilities
+                                            augmentations = [
+                                                (0.5, augmentor.add_gaussian_noise),
+                                                (0.5, augmentor.scaling),
+                                                (0.3, augmentor.time_shift),
+                                                (0.3, augmentor.channel_dropout),
+                                                (0.2, augmentor.temporal_permutation),
+                                                (0.2, augmentor.masking),
+                                                (0.2, augmentor.frequency_shift),
+                                                (0.2, augmentor.amplitude_scale)
+                                            ]
+                                            
+                                            for prob, aug_func in augmentations:
+                                                if random.random() < prob:
+                                                    eeg_data = aug_func(eeg_data)
+                                            
+                                            word['word_level_EEG'][eeg_type][band] = eeg_data.tolist()
+                                        except Exception as e:
+                                            print(f"Warning: Could not augment word_level_EEG for band {band}: {e}")
+                                            continue
+                            
+                            # Augment raw EEG if present
+                            try:
+                                if 'rawEEG' in word and word['rawEEG'] and len(word['rawEEG']) > 0:
+                                    raw_eeg = np.array(word['rawEEG'][0])
+                                    
+                                    # Apply augmentations to raw EEG
+                                    if random.random() < 0.5:
+                                        raw_eeg = augmentor.add_gaussian_noise(raw_eeg)
+                                    if random.random() < 0.4:
+                                        raw_eeg = augmentor.channel_dropout(raw_eeg)
+                                    if random.random() < 0.3:
+                                        raw_eeg = augmentor.temporal_permutation(raw_eeg)
+                                    if random.random() < 0.2:
+                                        raw_eeg = augmentor.frequency_shift(raw_eeg)
+                                    if random.random() < 0.2:
+                                        raw_eeg = augmentor.amplitude_scale(raw_eeg)
+                                    
+                                    word['rawEEG'][0] = raw_eeg.tolist()
+                            except Exception as e:
+                                print(f"Warning: Could not augment rawEEG: {e}")
+                                continue
+                        
+                        augmented_dict[subject].append(aug_sentence)
+                    except Exception as e:
+                        print(f"Warning: Could not augment sentence: {e}")
+                        continue
+                        
+        except Exception as e:
+            print(f"Warning: Could not process subject {subject}: {e}")
+            continue
+    
+    return augmented_dict
+
 def get_input_sample(sent_obj, tokenizer, eeg_type='GD', 
                     bands=['_t1','_t2','_a1','_a2','_b1','_b2','_g1','_g2'], 
                     max_len=56, add_CLS_token=False, subj='unspecified', raw_eeg=False):
-    
+    """Process input sample for the model"""
     if sent_obj is None:
         return None
 
@@ -135,7 +268,7 @@ def get_input_sample(sent_obj, tokenizer, eeg_type='GD',
         word_contents = []
 
         if add_CLS_token:
-            word_embeddings.append(torch.ones(104*len(bands)))
+            word_embeddings.append(torch.ones(105*len(bands)))
 
         for word in sent_obj['word']:
             try:
@@ -154,7 +287,7 @@ def get_input_sample(sent_obj, tokenizer, eeg_type='GD',
 
             if raw_eeg:
                 try:
-                    word_level_raw_eeg_tensor = word_level_raw_eeg_tensor[:,:104]
+                    word_level_raw_eeg_tensor = word_level_raw_eeg_tensor[:,:105]
                     word_raw_embeddings.append(word_level_raw_eeg_tensor)
                 except Exception as e:
                     print(f"Warning: Error processing raw EEG tensor: {e}")
@@ -167,7 +300,7 @@ def get_input_sample(sent_obj, tokenizer, eeg_type='GD',
         while len(word_embeddings) < max_len:
             word_embeddings.append(torch.zeros(105*len(bands)))
             if raw_eeg:
-                word_raw_embeddings.append(torch.zeros(1,104))
+                word_raw_embeddings.append(torch.zeros(1,105))
 
         # Process word contents
         word_contents_tokenized = tokenizer(' '.join(word_contents), 
@@ -222,77 +355,8 @@ def get_input_sample(sent_obj, tokenizer, eeg_type='GD',
         print(f"Error processing input sample: {e}")
         return None
 
-def augment_zuco_dataset(dataset_dict, augmentor, num_augmentations=1):
-    """
-    Augment the ZuCo dataset with various EEG transformations
-    """
-    augmented_dict = {}
-    
-    for subject, sentences in dataset_dict.items():
-        try:
-            augmented_dict[subject] = []
-            augmented_dict[subject].extend(sentences)
-            
-            for sentence in sentences:
-                for aug_idx in range(num_augmentations):
-                    try:
-                        aug_sentence = dict(sentence)
-                        
-                        for word in aug_sentence['word']:
-                            # Augment word-level EEG
-                            if 'word_level_EEG' in word:
-                                for eeg_type in word['word_level_EEG']:
-                                    for band in word['word_level_EEG'][eeg_type]:
-                                        try:
-                                            eeg_data = np.array(word['word_level_EEG'][eeg_type][band])
-                                            
-                                            # Apply random augmentations
-                                            augmentations = [
-                                                (0.5, augmentor.add_gaussian_noise),
-                                                (0.5, augmentor.scaling),
-                                                (0.3, augmentor.time_shift),
-                                                (0.3, augmentor.frequency_shift),
-                                                (0.2, augmentor.amplitude_scale)
-                                            ]
-                                            
-                                            for prob, aug_func in augmentations:
-                                                if random.random() < prob:
-                                                    eeg_data = aug_func(eeg_data)
-                                            
-                                            word['word_level_EEG'][eeg_type][band] = eeg_data.tolist()
-                                        except Exception as e:
-                                            print(f"Warning: Could not augment word_level_EEG for band {band}: {e}")
-                                            continue
-                            
-                            # Augment raw EEG if present
-                            try:
-                                if 'rawEEG' in word and word['rawEEG'] and len(word['rawEEG']) > 0:
-                                    raw_eeg = np.array(word['rawEEG'][0])
-                                    
-                                    if random.random() < 0.5:
-                                        raw_eeg = augmentor.add_gaussian_noise(raw_eeg)
-                                    if random.random() < 0.4:
-                                        raw_eeg = augmentor.channel_dropout(raw_eeg)
-                                    if random.random() < 0.3:
-                                        raw_eeg = augmentor.temporal_permutation(raw_eeg)
-                                    
-                                    word['rawEEG'][0] = raw_eeg.tolist()
-                            except Exception as e:
-                                print(f"Warning: Could not augment rawEEG: {e}")
-                                continue
-                        
-                        augmented_dict[subject].append(aug_sentence)
-                    except Exception as e:
-                        print(f"Warning: Could not augment sentence: {e}")
-                        continue
-                        
-        except Exception as e:
-            print(f"Warning: Could not process subject {subject}: {e}")
-            continue
-    
-    return augmented_dict
-
 class ZuCo_dataset(Dataset):
+    """ZuCo dataset class for EEG data"""
     def __init__(self, input_dataset_dicts, phase, tokenizer, subject='ALL',
                  eeg_type='GD', bands=['_t1','_t2','_a1','_a2','_b1','_b2','_g1','_g2'],
                  raweeg=False, setting='unique_sent', is_add_CLS_token=False,
@@ -361,6 +425,7 @@ class ZuCo_dataset(Dataset):
 
     def _process_phase(self, input_dataset_dict, subjects, start_idx, end_idx,
                       tokenizer, eeg_type, bands, is_add_CLS_token, raweeg):
+        """Process data for a specific phase (train/dev/test)"""
         for key in subjects:
             for i in range(start_idx, end_idx):
                 try:
@@ -381,7 +446,7 @@ class ZuCo_dataset(Dataset):
 
     def _process_unique_subj(self, input_dataset_dict, phase, total_num_sentence,
                            tokenizer, eeg_type, bands, is_add_CLS_token, raweeg):
-        print('WARNING!!! only implemented for SR v1 dataset')
+        """Process data using unique subject setting"""
         subjects_map = {
             'train': ['ZAB', 'ZDM', 'ZGW', 'ZJM', 'ZJN', 'ZJS', 'ZKB', 'ZKH', 'ZKW'],
             'dev': ['ZMG'],
@@ -416,6 +481,7 @@ class ZuCo_dataset(Dataset):
         return len(self.inputs)
 
     def __getitem__(self, idx):
+        """Get a sample from the dataset"""
         input_sample = self.inputs[idx]
         return (
             input_sample['input_embeddings'], 
@@ -424,9 +490,9 @@ class ZuCo_dataset(Dataset):
             input_sample['input_attn_mask_invert'],
             input_sample['target_ids'], 
             input_sample['target_mask'], 
-            input_sample['sentiment_label'], 
-            input_sample['sent_level_EEG'],
-            input_sample['input_raw_embeddings'],
+            input_sample['sentiment_label'],
+            input_sample.get('sent_level_EEG', None),
+            input_sample.get('input_raw_embeddings', None),
             input_sample['word_contents'],
             input_sample['word_contents_attn'],
             input_sample['subject']
