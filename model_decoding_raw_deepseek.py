@@ -126,11 +126,21 @@ class BrainTranslator(nn.Module):
                 param.requires_grad = True
 
     def _expand_mask(self, mask):
-        """Convert 1D attention mask to 2D attention mask"""
+        """Convert attention mask and ensure proper shape for transformer attention"""
         bsz = mask.size(0)
         seq_len = mask.size(1)
-        mask_2d = mask.unsqueeze(1).expand(bsz, seq_len, seq_len)
-        return mask_2d.bool()
+        
+        # Create mask for key padding
+        key_padding_mask = mask.bool()
+        
+        # For sequence masking in transformer
+        if self.training:
+            # During training, we don't need causal masking
+            return key_padding_mask
+        else:
+            # During inference, we might want to prevent attention to future tokens
+            mask_2d = torch.zeros((seq_len, seq_len), device=mask.device)
+            return key_padding_mask, mask_2d
 
     def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, 
                 target_ids_batch_converted, lenghts_words, word_contents_batch, 
@@ -164,10 +174,9 @@ class BrainTranslator(nn.Module):
 
         brain_embedding = encoded_embedding_subject + self.pos_embedding
         
-        # Create attention mask for transformer
+        # Handle attention mask for transformer
         if input_masks_invert is not None:
-            # Convert mask from [batch_size, seq_len] to [batch_size, seq_len, seq_len]
-            attention_mask = ~self._expand_mask(input_masks_invert)
+            attention_mask = self._expand_mask(input_masks_invert)
         else:
             attention_mask = None
 
@@ -179,10 +188,13 @@ class BrainTranslator(nn.Module):
             brain_embedding = torch.utils.checkpoint.checkpoint(
                 create_custom_forward(self.encoder),
                 brain_embedding, 
-                attention_mask
+                attention_mask if isinstance(attention_mask, torch.Tensor) else attention_mask[0] if attention_mask else None
             )
         else:
-            brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=attention_mask)
+            brain_embedding = self.encoder(
+                brain_embedding, 
+                src_key_padding_mask=attention_mask if isinstance(attention_mask, torch.Tensor) else attention_mask[0] if attention_mask else None
+            )
             
         brain_embedding = self.layernorm_embedding(brain_embedding)
         brain_embedding = self.brain_projection(brain_embedding)
