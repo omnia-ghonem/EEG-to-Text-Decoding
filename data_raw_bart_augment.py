@@ -107,22 +107,48 @@ class EEGAugmentor:
         try:
             if len(eeg_data) == 0:
                 return eeg_data
+            
+            # Handle different input dimensions
+            original_shape = eeg_data.shape
+            if len(original_shape) > 1:
+                # If multi-dimensional, process each channel separately
+                shifted_data = np.zeros_like(eeg_data)
+                for i in range(original_shape[0]):
+                    channel_data = eeg_data[i]
+                    # Apply FFT
+                    fft_data = np.fft.rfft(channel_data)
+                    freqs = np.fft.rfftfreq(len(channel_data))
+                    
+                    # Random frequency shift
+                    shift = random.uniform(-self.freq_shift_range, self.freq_shift_range)
+                    shifted_freqs = np.clip(freqs + shift, 0, None)  # Ensure non-negative frequencies
+                    
+                    # Interpolate to get shifted spectrum
+                    interpolator = interp1d(freqs, np.abs(fft_data), bounds_error=False, fill_value=0, kind='linear')
+                    phase = np.angle(fft_data)
+                    shifted_magnitude = interpolator(shifted_freqs)
+                    
+                    # Reconstruct complex spectrum
+                    shifted_fft = shifted_magnitude * np.exp(1j * phase)
+                    
+                    # Inverse FFT
+                    shifted_data[i] = np.fft.irfft(shifted_fft, n=len(channel_data))
                 
-            # Apply FFT
-            fft_data = np.fft.fft(eeg_data)
-            freqs = np.fft.fftfreq(len(eeg_data))
-            
-            # Random frequency shift
-            shift = random.uniform(-self.freq_shift_range, self.freq_shift_range)
-            shifted_freqs = freqs + shift
-            
-            # Interpolate to get shifted spectrum
-            interpolator = interp1d(freqs, fft_data, bounds_error=False, fill_value=0)
-            shifted_fft = interpolator(shifted_freqs)
-            
-            # Inverse FFT
-            shifted_data = np.fft.ifft(shifted_fft).real
-            return shifted_data
+                return shifted_data
+            else:
+                # For 1D data
+                fft_data = np.fft.rfft(eeg_data)
+                freqs = np.fft.rfftfreq(len(eeg_data))
+                
+                shift = random.uniform(-self.freq_shift_range, self.freq_shift_range)
+                shifted_freqs = np.clip(freqs + shift, 0, None)
+                
+                interpolator = interp1d(freqs, np.abs(fft_data), bounds_error=False, fill_value=0, kind='linear')
+                phase = np.angle(fft_data)
+                shifted_magnitude = interpolator(shifted_freqs)
+                
+                shifted_fft = shifted_magnitude * np.exp(1j * phase)
+                return np.fft.irfft(shifted_fft, n=len(eeg_data))
             
         except Exception as e:
             print(f"Warning: Error in frequency shift: {e}")
