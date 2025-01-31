@@ -13,10 +13,15 @@ import time
 from tqdm import tqdm
 from transformers import BartTokenizer, BartForConditionalGeneration
 import sys
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_new_dataset.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_new_dataset.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
+for path in sys.path:
+    print(path)
 
-import data_raw
+import data_raw_new_dataset
 import config
-import model_decoding_raw
+import model_decoding_raw_new_dataset
 from torch.nn.utils.rnn import pad_sequence
 
 from nltk.translate.bleu_score import corpus_bleu
@@ -279,11 +284,11 @@ if __name__ == '__main__':
     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
 
     # train dataset
-    train_set = data_raw.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
+    train_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
     # dev dataset
-    dev_set = data_raw.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
+    dev_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
     # test dataset
-    test_set = data_raw.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
+    test_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
 
     dataset_sizes = {'train': len(train_set), 'dev': len(dev_set), 'test': len(test_set)}
     print('[INFO]train_set size: ', len(train_set))
@@ -309,7 +314,7 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-        model = model_decoding_raw.BrainTranslator(
+        model = model_decoding_raw_new_dataset.BrainTranslator(
             pretrained, 
             in_feature=192,  # BCI data has 192 features
             decoder_embedding_size=1024,
