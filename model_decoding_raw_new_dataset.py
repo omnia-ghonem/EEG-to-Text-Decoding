@@ -1,159 +1,176 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-import math
-class TemporalEncoder(nn.Module):
-    def __init__(self, input_dim=192, hidden_dim=512, num_layers=2):
+import torch.utils.data
+import torch
+from torch.nn.utils.rnn import pack_padded_sequence
+
+def cross_entropy(preds, targets, reduction='none'):
+    log_softmax = nn.LogSoftmax(dim=-1)
+    loss = (-targets * log_softmax(preds)).sum(1)
+    if reduction == "none":
+        return loss
+    elif reduction == "mean":
+        return loss.mean()
+
+class ProjectionHead(nn.Module):
+    def __init__(
+        self,
+        embedding_dim,
+        projection_dim=1024,
+        dropout=0.1
+    ):
         super().__init__()
-        self.gru = nn.GRU(
-            input_size=input_dim,
-            hidden_size=hidden_dim,
-            num_layers=num_layers,
-            bidirectional=True,
-            dropout=0.2,
-            batch_first=True
-        )
-        
-        # Initialize GRU weights
-        for name, param in self.gru.named_parameters():
-            if 'weight' in name:
-                nn.init.orthogonal_(param)
-            elif 'bias' in name:
-                nn.init.constant_(param, 0)
-
-    def forward(self, x, lengths):
-        # Pack sequence
-        packed = pack_padded_sequence(
-            x, lengths.cpu(), batch_first=True, enforce_sorted=False
-        )
-        
-        # Process through GRU
-        outputs, _ = self.gru(packed)
-        
-        # Unpack sequence
-        outputs, _ = pad_packed_sequence(outputs, batch_first=True)
-        
-        return outputs
-
-class TransformerEncoder(nn.Module):
-    def __init__(self, d_model=1024, nhead=8, num_layers=6, dim_feedforward=2048):
-        super().__init__()
-        self.pos_encoder = PositionalEncoding(d_model)
-        
-        encoder_layers = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=nhead,
-            dim_feedforward=dim_feedforward,
-            dropout=0.1,
-            batch_first=True
-        )
-        
-        self.transformer = nn.TransformerEncoder(encoder_layers, num_layers)
-        self.norm = nn.LayerNorm(d_model)
-
-    def forward(self, x, mask=None):
-        x = self.pos_encoder(x)
-        x = self.transformer(x, src_key_padding_mask=mask)
-        return self.norm(x)
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = 5000):
-        super().__init__()
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(1, max_len, d_model)
-        pe[0, :, 0::2] = torch.sin(position * div_term)
-        pe[0, :, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-
+        self.projection = nn.Linear(embedding_dim, projection_dim)
+        self.gelu = nn.GELU()
+        self.fc = nn.Linear(projection_dim, projection_dim)
+        self.dropout = nn.Dropout(dropout)
+    
     def forward(self, x):
-        return x + self.pe[:, :x.size(1)]
-
+        projected = self.projection(x)
+        x = self.gelu(projected)
+        x = self.fc(x)
+        x = self.dropout(x)
+        x = x + projected
+        return x
+    
 class BrainTranslator(nn.Module):
-    def __init__(self, bart_model, input_dim=192, hidden_dim=512, embedding_dim=1024):
-        super().__init__()
+    def __init__(self, bart, in_feature=192, decoder_embedding_size=1024, additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
+        super(BrainTranslator, self).__init__()
         
-        # Neural encoder components - reduce hidden dimensions
-        self.temporal_encoder = TemporalEncoder(
-            input_dim=input_dim,
-            hidden_dim=hidden_dim // 2  # Reduced from 512 to 256
-        )
-        
-        self.projection = nn.Sequential(
-            nn.Linear(hidden_dim, embedding_dim),  # Reduced input dim
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(embedding_dim, embedding_dim),
-            nn.LayerNorm(embedding_dim)
-        )
-        
-        self.transformer_encoder = TransformerEncoder(
-            d_model=embedding_dim,
-            nhead=8,
-            num_layers=4  # Reduced from 6 to 4 layers
-        )
-        
-        # BART model with gradient checkpointing
-        self.bart = bart_model
-        self.bart.config.use_cache = False  # Disable KV caching for training
-        self.bart.gradient_checkpointing_enable()  # Enable gradient checkpointing
-        
-    def freeze_bart(self):
-        """Freeze BART parameters"""
-        for param in self.bart.parameters():
-            param.requires_grad = False
-            
-    def freeze_neural_encoder(self):
-        """Freeze neural encoder parameters"""
-        for param in self.temporal_encoder.parameters():
-            param.requires_grad = False
-        for param in self.projection.parameters():
-            param.requires_grad = False
-        for param in self.transformer_encoder.parameters():
-            param.requires_grad = False
+        # Embedded BCI raw features
+        self.hidden_dim = 512
+        self.feature_embedded = FeatureEmbedded(input_dim=192, hidden_dim=self.hidden_dim)  # Changed from 104 to 192 for BCI
+        self.fc = ProjectionHead(embedding_dim=in_feature, projection_dim=in_feature, dropout=0.1)
 
-    def forward(self, neural_data, neural_mask, input_ids=None, attention_mask=None):
-        # Get sequence lengths from mask
-        lengths = neural_mask.sum(dim=1).cpu()
+        # conv1d
+        self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
+
+        # Only one subject in BCI dataset
+        self.subjects_map_id = {'t5': 0}
         
-        # Process through temporal encoder 
-        temporal_features = self.temporal_encoder(neural_data, lengths)
+        # learnable subject matrices (just one for BCI)
+        self.subject_matrices = [nn.Parameter(torch.randn(64, 1))]
         
-        # Project to BART dimension
-        projected = self.projection(temporal_features)
+        # Brain transformer encoder
+        self.pos_embedding = nn.Parameter(torch.randn(1, 201, in_feature))  # Changed from 56 to 201 for BCI sequences
+        self.encoder_layer = nn.TransformerEncoderLayer(
+            d_model=in_feature, 
+            nhead=additional_encoder_nhead,  
+            dim_feedforward=additional_encoder_dim_feedforward, 
+            dropout=0.1, 
+            activation="gelu", 
+            batch_first=True
+        )
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
+        self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-05)
+
+        self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=1024, dropout=0.2)
         
-        # Free memory
-        del temporal_features
-        torch.cuda.empty_cache()
+        # BART
+        self.bart = bart
         
-        # Process through transformer encoder
-        encoded = self.transformer_encoder(
-            projected,
-            mask=(1 - neural_mask).bool()
+    def freeze_pretrained_bart(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = True
+            if ('bart' in name):
+                param.requires_grad = False
+
+    def freeze_pretrained_brain(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = False
+            if ('bart' in name):
+                param.requires_grad = True
+
+    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch_converted, lenghts_words, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device, features=False):
+        feature_embedding = self.feature_embedded(input_embeddings_batch, lenghts_words, device)
+        if len(feature_embedding.shape)==2:
+            feature_embedding = torch.unsqueeze(feature_embedding,0)
+        encoded_embedding = self.fc(feature_embedding)
+
+        # subject layer (simpler since we have only one subject)
+        encoded_embedding_subject = []
+        for i in range(encoded_embedding.shape[0]):
+            tmp = torch.unsqueeze(encoded_embedding[i,:,:], 1)
+            tmp = self.conv1d_point(tmp)
+            tmp = torch.swapaxes(tmp, 1, 2)
+            mat_subject = self.subject_matrices[0].to(device)  # Always use first matrix since we have one subject
+            tmp = torch.matmul(tmp, mat_subject)
+            tmp = torch.squeeze(tmp)
+            encoded_embedding_subject.append(tmp)        
+            
+        if len(encoded_embedding_subject) == 1:
+            encoded_embedding_subject = torch.unsqueeze(encoded_embedding_subject[0], 0)
+        else:
+            encoded_embedding_subject = torch.stack(encoded_embedding_subject, 0).to(device)
+
+        brain_embedding = encoded_embedding_subject + self.pos_embedding
+        brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
+        brain_embedding = self.layernorm_embedding(brain_embedding)
+        
+        brain_embedding = self.brain_projection(brain_embedding)
+
+        if stepone==True:
+            words_embedding = self.bart.model.encoder.embed_tokens(word_contents_batch)
+            loss = nn.MSELoss()
+            return loss(brain_embedding, words_embedding)
+        else:
+            out = self.bart(
+                inputs_embeds=brain_embedding, 
+                attention_mask=input_masks_batch, 
+                return_dict=True,  
+                labels=target_ids_batch_converted
+            )
+            if features==True:
+                return out.logits, brain_embedding
+                
+            return out.logits
+
+
+class FeatureEmbedded(nn.Module):
+    def __init__(self, input_dim=192, hidden_dim=512, num_layers=2, is_bidirectional=True):
+        super(FeatureEmbedded, self).__init__()
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.is_bidirectional = is_bidirectional
+        
+        self.lstm = nn.GRU(
+            input_size=self.input_dim, 
+            hidden_size=self.hidden_dim, 
+            num_layers=self.num_layers, 
+            batch_first=True, 
+            dropout=0.2,
+            bidirectional=self.is_bidirectional
         )
         
-        # Free memory
-        del projected
-        torch.cuda.empty_cache()
-        
-        # Generate text with BART
-        if self.training:
-            # Use torch.cuda.amp.autocast() for mixed precision training
-            with torch.cuda.amp.autocast():
-                outputs = self.bart(
-                    inputs_embeds=encoded,
-                    attention_mask=neural_mask,
-                    labels=input_ids,
-                    return_dict=True
-                )
-            return outputs.loss, outputs.logits
-        else:
-            outputs = self.bart.generate(
-                inputs_embeds=encoded,
-                attention_mask=neural_mask,
-                max_length=128,
-                num_beams=4,
-                early_stopping=True
-            )
-            return outputs
+        # Initialize parameters
+        for name, param in self.lstm.named_parameters():
+            if 'bias' in name:
+                nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                nn.init.orthogonal_(param)
+                
+    def forward(self, x, lenghts, device):
+        sentence_embedding_batch = []
+        for x_sentence, lenghts_sentence in zip(x, lenghts):
+            lstm_input = pack_padded_sequence(x_sentence, lenghts_sentence.cpu().numpy(), batch_first=True, enforce_sorted=False)
+            lstm_outs, hidden = self.lstm(lstm_input)
+            lstm_outs, _ = nn.utils.rnn.pad_packed_sequence(lstm_outs)  
+
+            if not self.is_bidirectional:
+                sentence_embedding = []
+                for i in range(lenghts_sentence.shape[0]):
+                    sentence_embedding.append(lstm_outs[int(lenghts_sentence[i]-1),i,:])
+                sentence_embedding = torch.stack(sentence_embedding, 0)  #lstm_outs[-1]
+            else:
+                sentence_embedding = []
+                for i in range(lenghts_sentence.shape[0]):
+                    sentence_embedding.append(lstm_outs[int(lenghts_sentence[i]-1),i,:])
+                sentence_embedding = torch.stack(sentence_embedding, 0)
+
+            sentence_embedding_batch.append(sentence_embedding)
+
+        return torch.squeeze(torch.stack(sentence_embedding_batch, 0)).to(device)
