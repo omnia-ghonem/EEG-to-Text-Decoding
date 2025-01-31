@@ -56,7 +56,7 @@ class HandwritingBCI_Dataset(Dataset):
                 data = scipy.io.loadmat(file_path)
                 
                 # Extract neural data and text
-                neural_data = data.get('neuralActivityTimeSeries', [])
+                neural_data = data.get('neuralActivityTimeSeries', [])  # Shape: (n_trials, n_timepoints, n_channels)
                 text_data = data.get('sentencePrompt', []) if mode == "sentences" else data.get('characterCues', [])
                 
                 if len(neural_data) == 0 or len(text_data) == 0:
@@ -67,13 +67,10 @@ class HandwritingBCI_Dataset(Dataset):
                 
                 # Process each trial
                 for trial_idx in range(len(neural_data)):
-                    neural_trial = neural_data[trial_idx]
-                    text_trial = text_data[trial_idx][0] if mode == "sentences" else text_data[trial_idx]
-                    
-                    # Debug print for data shapes
-                    print(f"Trial {trial_idx} shape: {neural_trial.shape}, Text: {text_trial}")
-                    
-                    sample = self.get_input_sample(neural_trial, text_trial)
+                    sample = self.get_input_sample(
+                        neural_data[trial_idx], 
+                        text_data[trial_idx][0] if mode == "sentences" else text_data[trial_idx]
+                    )
                     if sample is not None:
                         self.inputs.append(sample)
                         
@@ -84,15 +81,9 @@ class HandwritingBCI_Dataset(Dataset):
         print(f'[INFO] Loaded {len(self.inputs)} samples from {len(self.session_ids)} sessions for {phase}')
 
     def normalize_neural_data(self, neural_data):
-        """Normalize neural data across time dimension"""
-        if len(neural_data.shape) == 3:
-            # If shape is (time, channels, features)
-            mean = np.mean(neural_data, axis=(0, 2), keepdims=True)
-            std = np.std(neural_data, axis=(0, 2), keepdims=True)
-        else:
-            # If shape is (time, channels)
-            mean = np.mean(neural_data, axis=0, keepdims=True)
-            std = np.std(neural_data, axis=0, keepdims=True)
+        """Normalize neural data using z-score normalization"""
+        mean = np.mean(neural_data, axis=0, keepdims=True)
+        std = np.std(neural_data, axis=0, keepdims=True)
         return (neural_data - mean) / (std + 1e-8)
 
     def get_input_sample(self, neural_activity, text):
@@ -126,38 +117,33 @@ class HandwritingBCI_Dataset(Dataset):
             
             # Process neural data
             if isinstance(neural_activity, np.ndarray):
-                # Print shape for debugging
-                print(f"Neural activity shape: {neural_activity.shape}")
-                
-                # Reshape if necessary
-                if len(neural_activity.shape) == 3:
-                    # If shape is (time, channels, features)
-                    neural_activity = neural_activity.reshape(neural_activity.shape[0], -1)
-                
                 # Normalize neural data
                 neural_activity = self.normalize_neural_data(neural_activity)
                 
                 # Convert to tensor
                 neural_tensor = torch.tensor(neural_activity, dtype=torch.float32)
                 
-                # Store original sequence length
-                orig_seq_len = neural_tensor.shape[0]
+                # Ensure shape is correct (time, channels)
+                if len(neural_tensor.shape) == 1:
+                    neural_tensor = neural_tensor.unsqueeze(1)
+                elif len(neural_tensor.shape) > 2:
+                    neural_tensor = neural_tensor.reshape(-1, neural_tensor.shape[-1])
+                
+                # Original sequence length before padding
+                seq_len = neural_tensor.shape[0]
                 
                 # Pad or truncate to max_len
                 if neural_tensor.shape[0] < self.max_len:
                     padding = torch.zeros((self.max_len - neural_tensor.shape[0], neural_tensor.shape[1]))
                     neural_tensor = torch.cat((neural_tensor, padding), dim=0)
-                    # Create attention mask
-                    attn_mask = torch.ones(self.max_len)
-                    attn_mask[orig_seq_len:] = 0
                 else:
                     neural_tensor = neural_tensor[:self.max_len, :]
-                    attn_mask = torch.ones(self.max_len)
+                    seq_len = self.max_len
                 
                 input_sample['input_embeddings'] = neural_tensor
-                input_sample['input_attn_mask'] = attn_mask
-                input_sample['input_attn_mask_invert'] = 1 - attn_mask
-                input_sample['seq_len'] = torch.tensor(min(orig_seq_len, self.max_len))
+                input_sample['input_attn_mask'] = torch.ones(self.max_len)
+                input_sample['input_attn_mask_invert'] = torch.zeros(self.max_len)
+                input_sample['seq_len'] = torch.tensor(seq_len)
                 input_sample['subject'] = 't5'
                 
                 return input_sample
@@ -178,33 +164,9 @@ class HandwritingBCI_Dataset(Dataset):
             input_sample['input_embeddings'],
             input_sample['seq_len'],
             input_sample['input_attn_mask'],
+            input_sample['input_attn_mask'],
             input_sample['input_attn_mask_invert'], 
             input_sample['target_ids'],
             input_sample['target_mask'],
             input_sample['subject']
         )
-
-if __name__ == '__main__':
-    # Test dataset loading
-    print("\nTesting dataset loading...")
-    
-    data_dir = "/kaggle/input/handwriting-bci/handwritingBCIData/Datasets"
-    print(f"Looking for data in: {data_dir}")
-    
-    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-    
-    print("\nLoading train set...")
-    train_set = HandwritingBCI_Dataset(data_dir=data_dir, mode="sentences", tokenizer=tokenizer, phase='train')
-    print(f'Train set size: {len(train_set)}')
-    
-    if len(train_set) > 0:
-        # Test a sample
-        sample = train_set[0]
-        print("\nSample shapes:")
-        print(f"Neural data: {sample[0].shape}")
-        print(f"Sequence length: {sample[1]}")
-        print(f"Attention mask: {sample[2].shape}")
-        
-        # Test tokenization
-        text = tokenizer.decode(sample[4], skip_special_tokens=True)
-        print(f"\nDecoded text sample: {text}")
