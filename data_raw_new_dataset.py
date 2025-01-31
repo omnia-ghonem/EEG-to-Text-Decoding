@@ -87,13 +87,7 @@ class HandwritingBCI_Dataset(Dataset):
         return (neural_data - mean) / (std + 1e-8)
 
     def get_input_sample(self, neural_activity, text):
-        """Process a single input sample
-        Args:
-            neural_activity: Raw neural activity data
-            text: Text label/prompt
-        Returns:
-            Dictionary containing processed inputs
-        """
+        """Process a single input sample"""
         try:
             input_sample = {}
             
@@ -135,17 +129,21 @@ class HandwritingBCI_Dataset(Dataset):
                 elif len(neural_tensor.shape) > 2:
                     neural_tensor = neural_tensor.reshape(-1, neural_tensor.shape[-1])
                 
+                # Original sequence length before padding
+                seq_len = neural_tensor.shape[0]
+                
                 # Pad or truncate to max_len
                 if neural_tensor.shape[0] < self.max_len:
                     padding = torch.zeros((self.max_len - neural_tensor.shape[0], neural_tensor.shape[1]))
                     neural_tensor = torch.cat((neural_tensor, padding), dim=0)
                 else:
                     neural_tensor = neural_tensor[:self.max_len, :]
+                    seq_len = self.max_len
                 
                 input_sample['input_embeddings'] = neural_tensor
                 input_sample['input_attn_mask'] = torch.ones(self.max_len)
                 input_sample['input_attn_mask_invert'] = torch.zeros(self.max_len)
-                input_sample['seq_len'] = torch.tensor(min(neural_tensor.shape[0], self.max_len))
+                input_sample['seq_len'] = torch.tensor(seq_len)
                 input_sample['subject'] = 't5'
                 
                 return input_sample
@@ -166,41 +164,9 @@ class HandwritingBCI_Dataset(Dataset):
             input_sample['input_embeddings'],
             input_sample['seq_len'],
             input_sample['input_attn_mask'],
+            input_sample['input_attn_mask'],
             input_sample['input_attn_mask_invert'], 
             input_sample['target_ids'],
             input_sample['target_mask'],
             input_sample['subject']
         )
-
-if __name__ == '__main__':
-    # Test dataset loading
-    print("\nTesting dataset loading...")
-    
-    data_dir = "/kaggle/input/handwriting-bci/handwritingBCIData/Datasets"
-    print(f"Looking for data in: {data_dir}")
-    
-    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-    
-    print("\nLoading train set...")
-    train_set = HandwritingBCI_Dataset(data_dir=data_dir, mode="sentences", tokenizer=tokenizer, phase='train')
-    print(f'Train set size: {len(train_set)}')
-    
-    print("\nLoading dev set...")
-    dev_set = HandwritingBCI_Dataset(data_dir=data_dir, mode="sentences", tokenizer=tokenizer, phase='dev')
-    print(f'Dev set size: {len(dev_set)}')
-    
-    print("\nLoading test set...")
-    test_set = HandwritingBCI_Dataset(data_dir=data_dir, mode="sentences", tokenizer=tokenizer, phase='test')
-    print(f'Test set size: {len(test_set)}')
-    
-    if len(train_set) > 0:
-        # Test a sample
-        sample = train_set[0]
-        print("\nSample shapes:")
-        print(f"Neural data: {sample[0].shape}")
-        print(f"Sequence length: {sample[1]}")
-        print(f"Attention mask: {sample[2].shape}")
-        
-        # Test tokenization
-        text = tokenizer.decode(sample[4], skip_special_tokens=True)
-        print(f"\nDecoded text sample: {text}")
