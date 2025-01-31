@@ -37,6 +37,7 @@ class FeatureEmbedded(nn.Module):
             bidirectional=self.is_bidirectional
         )
         
+        # Initialize parameters
         for name, param in self.lstm.named_parameters():
             if 'bias' in name:
                 nn.init.constant_(param, 0.0)
@@ -46,12 +47,34 @@ class FeatureEmbedded(nn.Module):
                 nn.init.orthogonal_(param)
                 
     def forward(self, x, lengths, device):
-        # Convert lengths to list
+        batch_size = x.size(0)
+        
+        # Handle input reshaping
+        if x.dim() == 2:
+            # If input is [batch_size, features*seq_len]
+            if isinstance(lengths, list):
+                seq_len = lengths[0]
+            else:
+                seq_len = lengths.item()
+            x = x.view(batch_size, seq_len, -1)
+        elif x.dim() == 3:
+            # Input is already [batch_size, seq_len, features]
+            seq_len = x.size(1)
+            
+        # Validate dimensions
+        if x.size(-1) != self.input_dim:
+            raise ValueError(f"Expected input dimension {self.input_dim}, got {x.size(-1)}")
+        
+        # Convert lengths to list if needed
         if torch.is_tensor(lengths):
             lengths = lengths.cpu().tolist()
         elif isinstance(lengths, int):
             lengths = [lengths]
         
+        # Ensure lengths are proper size
+        if len(lengths) == 1 and batch_size > 1:
+            lengths = lengths * batch_size
+            
         # Pack sequence
         packed_input = pack_padded_sequence(
             x,
@@ -66,11 +89,11 @@ class FeatureEmbedded(nn.Module):
         # Unpack sequence
         unpacked_output, _ = nn.utils.rnn.pad_packed_sequence(lstm_out, batch_first=True)
         
-        # Get final states
-        batch_size = x.size(0)
+        # Get final states for each sequence in batch
         batch_final_states = []
         for i in range(batch_size):
             if self.is_bidirectional:
+                # For bidirectional, concatenate both directions
                 final_forward = unpacked_output[i, lengths[i]-1, :self.hidden_dim]
                 final_backward = unpacked_output[i, 0, self.hidden_dim:]
                 final_state = torch.cat([final_forward, final_backward], dim=0)
@@ -78,6 +101,7 @@ class FeatureEmbedded(nn.Module):
                 final_state = unpacked_output[i, lengths[i]-1, :]
             batch_final_states.append(final_state)
             
+        # Stack all final states
         output = torch.stack(batch_final_states, dim=0)
         return output.to(device)
 
@@ -87,11 +111,14 @@ class BrainTranslator(nn.Module):
         self.hidden_dim = 512
         self.in_feature = in_feature
         
+        # Feature embedding layers
         self.feature_embedded = FeatureEmbedded(input_dim=in_feature, hidden_dim=self.hidden_dim)
         self.fc = ProjectionHead(embedding_dim=in_feature, projection_dim=in_feature, dropout=0.1)
 
+        # Convolutional layer
         self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
         
+        # Transformer encoder layers
         self.pos_embedding = nn.Parameter(torch.randn(1, 201, in_feature))
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=in_feature, 
@@ -104,8 +131,10 @@ class BrainTranslator(nn.Module):
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-05)
         
+        # Brain projection layer
         self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=1024, dropout=0.2)
         
+        # BART model
         self.bart = bart
         
     def freeze_pretrained_bart(self):
@@ -122,35 +151,41 @@ class BrainTranslator(nn.Module):
 
     def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch, 
                lengths_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device):
+        # Process input embeddings
+        batch_size = input_embeddings_batch.size(0)
         
-        # Calculate proper dimensions
-        batch_size = input_embeddings_batch.size(0)  # Should be 20
-        total_elements = input_embeddings_batch.numel()  # Should be 4020
+        # Ensure the input is properly shaped
+        if input_embeddings_batch.dim() == 2:
+            # If input is [batch_size, features*seq_len], reshape it
+            seq_len = lengths_batch[0] if isinstance(lengths_batch, list) else lengths_batch.item()
+            input_embeddings_batch = input_embeddings_batch.view(batch_size, seq_len, -1)
+        elif input_embeddings_batch.dim() == 3:
+            # If input is already [batch_size, seq_len, features], use as is
+            seq_len = input_embeddings_batch.size(1)
+        else:
+            raise ValueError(f"Unexpected input dimension: {input_embeddings_batch.dim()}")
+            
+        # Ensure the feature dimension matches expected size
+        if input_embeddings_batch.size(-1) != self.in_feature:
+            raise ValueError(f"Expected feature dimension {self.in_feature}, got {input_embeddings_batch.size(-1)}")
         
-        # Since we know total_elements = batch_size * seq_len * feature_dim
-        # And since total_elements = 4020 and batch_size = 20
-        # seq_len * feature_dim = 4020/20 = 201
-        feature_dim = self.in_feature  # Should be 192
-        if total_elements == 4020 and batch_size == 20:
-            seq_len = total_elements // (batch_size * feature_dim)
-            if seq_len * batch_size * feature_dim != total_elements:
-                seq_len += 1
-                
-            # Reshape input to [batch_size, seq_len, feature_dim]
-            input_embeddings_batch = input_embeddings_batch.contiguous().view(batch_size, -1, feature_dim)
-        
+        # Get feature embeddings
         feature_embedding = self.feature_embedded(input_embeddings_batch, lengths_batch, device)
         if len(feature_embedding.shape) == 2:
             feature_embedding = feature_embedding.unsqueeze(0)
-            
+        
+        # Project features
         encoded_embedding = self.fc(feature_embedding)
         
+        # Apply convolutional layer
         tmp = encoded_embedding.unsqueeze(1)
         tmp = self.conv1d_point(tmp)
         tmp = tmp.transpose(1, 2)
         
+        # Add positional embeddings
         brain_embedding = tmp + self.pos_embedding[:, :tmp.size(1), :]
         
+        # Apply transformer encoder
         brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
         brain_embedding = self.layernorm_embedding(brain_embedding)
         brain_embedding = self.brain_projection(brain_embedding)
