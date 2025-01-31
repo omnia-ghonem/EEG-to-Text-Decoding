@@ -6,332 +6,413 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
+import pickle
 import json
+from glob import glob
 import time
 from tqdm import tqdm
 from transformers import BartTokenizer, BartForConditionalGeneration
 import sys
+
+import data_raw
+import config
+import model_decoding_raw
+from torch.nn.utils.rnn import pad_sequence
+
 from nltk.translate.bleu_score import corpus_bleu
 from rouge import Rouge
 from bert_score import score
-from torch.nn.utils.rnn import pad_sequence
+
 import warnings
-from pathlib import Path
-
-# Configure warnings and logging
 warnings.filterwarnings('ignore')
-import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('training.log')
-    ]
-)
-
-# Import transformers logging after basic config
-from transformers import logging as transformers_logging
-transformers_logging.set_verbosity_error()
-
-# Enable autograd anomaly detection
+from transformers import logging
+logging.set_verbosity_error()
 torch.autograd.set_detect_anomaly(True)
 
-# Set up tensorboard logging
 from torch.utils.tensorboard import SummaryWriter
-LOG_DIR = "runs_handwriting"
+LOG_DIR = "runs_h"
 train_writer = SummaryWriter(os.path.join(LOG_DIR, "train"))
 val_writer = SummaryWriter(os.path.join(LOG_DIR, "train_full"))
 dev_writer = SummaryWriter(os.path.join(LOG_DIR, "dev_full"))
 
-# Add paths for custom modules
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_new_dataset.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_new_dataset.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config_new_dataset.py')
+def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num_epochs=25, 
+                checkpoint_path_best='/kaggle/working/checkpoints/decoding_raw/best/temp_decoding.pt', 
+                checkpoint_path_last='/kaggle/working/checkpoints/decoding_raw/last/temp_decoding.pt', stepone=False):
+    since = time.time()
 
-import data_raw_new_dataset 
-import config_new_dataset
-import model_decoding_raw_new_dataset
+    best_loss = 100000000000
 
-class Trainer:
-    def __init__(self, args):
-        self.args = args
-        
-        # Set up device and mixed precision training
-        self.device = torch.device(args.get('cuda', 'cuda') if torch.cuda.is_available() else 'cpu')
-        self.scaler = torch.cuda.amp.GradScaler()  # For mixed precision training
-        
-        # Reduce batch size
-        self.args['batch_size'] = 4  # Reduced from original
-        
-        # Initialize components
-        self.setup_paths()
-        self.setup_data()
-        self.setup_model()
-        
-        # Setup logging
-        self.writer = {
-            'train': SummaryWriter(os.path.join(args['log_dir'], 'train')),
-            'val': SummaryWriter(os.path.join(args['log_dir'], 'val')),
-            'test': SummaryWriter(os.path.join(args['log_dir'], 'test'))
-        }
+    train_losses = []
+    val_losses = []
 
-    def setup_paths(self):
-        """Setup directory paths"""
-        # Create directories if they don't exist
-        for dir_name in ['checkpoint_dir', 'log_dir']:
-            if dir_name in self.args:
-                path = Path(self.args[dir_name])
-                path.mkdir(parents=True, exist_ok=True)
+    index_plot = 0
+    index_plot_dev = 0
 
-    def setup_data(self):
-        """Initialize datasets and dataloaders"""
-        self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-        
-        # Create datasets
-        self.datasets = {
-            phase: data_raw_new_dataset.HandwritingBCIDataset(
-                root_dir=self.args['data_dir'],
-                phase=phase,
-                tokenizer=self.tokenizer,
-                session_ids=self.args.get('session_ids', None)
-            )
-            for phase in ['train', 'dev', 'test']
-        }
-        
-        # Create dataloaders
-        self.dataloaders = {
-            'train': DataLoader(
-                self.datasets['train'],
-                batch_size=self.args['batch_size'],
-                shuffle=True,
-                collate_fn=data_raw_new_dataset.collate_fn,
-                num_workers=self.args.get('num_workers', 4)
-            ),
-            'dev': DataLoader(
-                self.datasets['dev'],
-                batch_size=1,
-                shuffle=False,
-                collate_fn=data_raw_new_dataset.collate_fn,
-                num_workers=self.args.get('num_workers', 4)
-            ),
-            'test': DataLoader(
-                self.datasets['test'],
-                batch_size=1,
-                shuffle=False,
-                collate_fn=data_raw_new_dataset.collate_fn,
-                num_workers=self.args.get('num_workers', 4)
-            )
-        }
+    for epoch in range(num_epochs):
+        print('Epoch {}/{}'.format(epoch, num_epochs - 1))
+        print(f"lr: {scheduler.get_lr()}")
+        print('-' * 10)
 
-    def setup_model(self):
-        """Initialize model, optimizer, and scheduler"""
-        # Create BART model
-        bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-        
-        # Create brain translator model
-        self.model = model_decoding_raw_new_dataset.BrainTranslator(
-            bart_model=bart,
-            input_dim=192,  # Number of electrodes
-            hidden_dim=self.args.get('hidden_dim', 512),
-            embedding_dim=self.args.get('embedding_dim', 1024)
-        ).to(self.device)
-
-        # Training utilities
-        self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
-        
-        if not self.args.get('skip_step_one', False):
-            # Step 1: Train neural encoder
-            self.optimizer = optim.Adam(
-                filter(lambda p: p.requires_grad, self.model.parameters()),
-                lr=self.args['learning_rate_step1']
-            )
-        else:
-            # Step 2: Fine-tune BART
-            self.model.freeze_neural_encoder()
-            self.optimizer = optim.Adam(
-                filter(lambda p: p.requires_grad, self.model.parameters()),
-                lr=self.args['learning_rate_step2']
-            )
-
-        # Learning rate scheduler
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, 
-            mode='min', 
-            patience=3,
-            factor=0.5
-        )
-
-    def train(self):
-        """Main training loop"""
-        best_val_loss = float('inf')
-        patience = self.args.get('patience', 5)
-        patience_counter = 0
-        
-        for epoch in range(self.args['num_epoch_step1']):
-            logging.info(f"Epoch {epoch+1}/{self.args['num_epoch_step1']}")
-            
-            # Training phase
-            train_loss = self.train_epoch()
-            
-            # Validation phase
-            val_loss = self.validate()
-            
-            # Log metrics
-            self.writer['train'].add_scalar('loss', train_loss, epoch)
-            self.writer['val'].add_scalar('loss', val_loss, epoch)
-            
-            # Learning rate scheduling
-            self.scheduler.step(val_loss)
-            
-            # Save checkpoint if best model
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                self.save_checkpoint('best.pt')
-                patience_counter = 0
+        # Each epoch has a training and validation phase
+        for phase in ['train', 'dev', 'test']:
+            if phase == 'train':
+                model.train()  # Set model to training mode
             else:
-                patience_counter += 1
-            
-            # Save periodic checkpoint
-            if (epoch + 1) % self.args.get('save_every', 5) == 0:
-                self.save_checkpoint(f'checkpoint_epoch_{epoch+1}.pt')
-            
-            # Early stopping
-            if patience_counter >= patience:
-                logging.info("Early stopping triggered")
-                break
+                model.eval()   # Set model to evaluate mode
 
-        # Final evaluation
-        self.evaluate()
+            running_loss = 0.0
 
+            if phase == 'test':
+                target_tokens_list = []
+                target_string_list = []
+                pred_tokens_list = []
+                pred_string_list = []
 
+            # Iterate over data.
+            with tqdm(dataloaders[phase], unit="batch") as tepoch:
+                for batch_idx, (neural_data, seq_len, input_masks, input_mask_invert, target_ids, target_mask, subject_batch) in enumerate(tepoch):
 
-    def train_epoch(self):
-        """Train for one epoch with memory optimization"""
-        self.model.train()
-        total_loss = 0
-        
-        with tqdm(self.dataloaders['train'], desc='Training') as pbar:
-            for batch_idx, batch in enumerate(pbar):
-                # Move data to device
-                neural_data = batch['neural_data'].to(self.device)
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                neural_mask = batch['neural_mask'].to(self.device)
-                
-                # Clear gradients
-                self.optimizer.zero_grad(set_to_none=True)  # More memory efficient
-                
-                # Forward pass with mixed precision
-                with torch.cuda.amp.autocast():
-                    loss, _ = self.model(neural_data, neural_mask, input_ids, attention_mask)
-                
-                # Backward pass with gradient scaling
-                self.scaler.scale(loss).backward()
-                self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-                
-                # Update metrics
-                total_loss += loss.item()
-                pbar.set_postfix({'loss': loss.item()})
-                
-                # Clear memory
-                del neural_data, input_ids, attention_mask, neural_mask, loss
-                torch.cuda.empty_cache()
-                
-                # Optional: gradient accumulation for larger effective batch size
-                if (batch_idx + 1) % self.args.get('gradient_accumulation_steps', 1) == 0:
-                    self.optimizer.step()
-                    self.optimizer.zero_grad(set_to_none=True)
-        
-        return total_loss / len(self.dataloaders['train'])
+                    # load in batch
+                    input_embeddings_batch = neural_data.float().to(device)
+                    input_masks_batch = torch.stack(input_masks, 0).to(device)
+                    input_mask_invert_batch = torch.stack(input_mask_invert, 0).to(device)
+                    target_ids_batch = torch.stack(target_ids, 0).to(device)
+                    
+                    if phase == 'test' and stepone==False:
+                        target_tokens = tokenizer.convert_ids_to_tokens(
+                            target_ids_batch[0].tolist(), skip_special_tokens=True)
+                        target_string = tokenizer.decode(
+                            target_ids_batch[0], skip_special_tokens=True)
+                        target_tokens_list.append([target_tokens])
+                        target_string_list.append(target_string)
 
-    def validate(self):
-        """Validation loop"""
-        self.model.eval()
-        total_loss = 0
-        
-        with torch.no_grad():
-            for batch in tqdm(self.dataloaders['dev'], desc='Validation'):
-                # Move data to device
-                neural_data = batch['neural_data'].to(self.device)
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                neural_mask = batch['neural_mask'].to(self.device)
-                
-                # Forward pass
-                loss, _ = self.model(neural_data, neural_mask, input_ids, attention_mask)
-                total_loss += loss.item()
-                
-        return total_loss / len(self.dataloaders['dev'])
+                    # zero the parameter gradients
+                    optimizer.zero_grad()
 
-    def evaluate(self):
-        """Evaluation loop"""
-        self.model.eval()
-        results = []
-        
-        with torch.no_grad():
-            for batch in tqdm(self.dataloaders['test'], desc='Testing'):
-                # Move data to device
-                neural_data = batch['neural_data'].to(self.device)
-                neural_mask = batch['neural_mask'].to(self.device)
-                
-                # Generate text
-                outputs = self.model(neural_data, neural_mask)
-                
-                # Decode predictions
-                predictions = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                
-                # Store results
-                results.extend(zip(batch['text'], predictions))
-                
-        # Save results
-        self.save_results(results)
-        
-        return results
+                    seq2seqLMoutput = model(
+                        input_embeddings_batch, input_masks_batch, input_mask_invert_batch, target_ids_batch, device)
 
-    def save_checkpoint(self, filename):
-        """Save model checkpoint"""
-        path = Path(self.args['checkpoint_dir']) / filename
-        torch.save({
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict(),
-            'args': self.args
-        }, path)
-        logging.info(f"Saved checkpoint to {path}")
+                    """replace padding ids in target_ids with -100"""
+                    target_ids_batch[target_ids_batch == tokenizer.pad_token_id] = -100
+                    
+                    """calculate loss"""
+                    if stepone==True:
+                        loss = seq2seqLMoutput
+                    else:
+                        loss = criterion(seq2seqLMoutput.permute(0, 2, 1), target_ids_batch.long()) 
 
-    def save_results(self, results):
-        """Save evaluation results"""
-        path = Path(self.args['log_dir']) / 'results.txt'
-        with open(path, 'w') as f:
-            for true_text, pred_text in results:
-                f.write(f"True: {true_text}\n")
-                f.write(f"Pred: {pred_text}\n")
-                f.write("-" * 50 + "\n")
+                    if phase == 'test' and stepone==False:
+                        logits = seq2seqLMoutput
+                        probs = logits[0].softmax(dim=1)
+                        values, predictions = probs.topk(1)
+                        predictions = torch.squeeze(predictions)
+                        predicted_string = tokenizer.decode(predictions).split(
+                            '</s></s>')[0].replace('<s>', '')
+
+                        predictions = predictions.tolist()
+                        truncated_prediction = []
+                        for t in predictions:
+                            if t != tokenizer.eos_token_id:
+                                truncated_prediction.append(t)
+                            else:
+                                break
+                        pred_tokens = tokenizer.convert_ids_to_tokens(
+                            truncated_prediction, skip_special_tokens=True)
+                        pred_tokens_list.append(pred_tokens)
+                        pred_string_list.append(predicted_string)
+
+                    # backward + optimize only if in training phase
+                    if phase == 'train':
+                        loss.backward()
+                        optimizer.step()
+                    
+                    # statistics
+                    running_loss += loss.item() * input_embeddings_batch.size()[0]  # batch loss
+
+                    tepoch.set_postfix(loss=loss.item(), lr=scheduler.get_lr())
+
+                    if phase == 'train':
+                        val_writer.add_scalar("train_full", loss.item(), index_plot)
+                        index_plot=index_plot+1
+                    if phase == 'dev':
+                        dev_writer.add_scalar("dev_full", loss.item(), index_plot_dev)
+                        index_plot_dev=index_plot_dev+1
+                    
+                    if phase == 'train':
+                        scheduler.step()
+
+            epoch_loss = running_loss / dataset_sizes[phase]
+
+            if phase == 'train':
+                train_losses.append(epoch_loss)
+                torch.save(model.state_dict(), checkpoint_path_last)
+            elif phase == 'dev':
+                val_losses.append(epoch_loss)
+
+            if phase == 'train':
+                train_losses.append(epoch_loss)
+                train_epoch_loss = epoch_loss
+                train_writer.add_scalar("train", epoch_loss, epoch)
+            elif phase == 'dev':
+                val_losses.append(epoch_loss)
+                train_writer.add_scalar("val", epoch_loss, epoch)
+
+                train_writer.add_scalars('loss train/val', {
+                    'train': train_epoch_loss,
+                    'val': epoch_loss,
+                }, epoch)
+
+            print('{} Loss: {:.4f}'.format(phase, epoch_loss))
+
+            # deep copy the model
+            if phase == 'dev' and epoch_loss < best_loss:
+                best_loss = epoch_loss
+                '''save checkpoint'''
+                torch.save(model.state_dict(), checkpoint_path_best)
+                print(f'update best on dev checkpoint: {checkpoint_path_best}')
+
+            if phase == 'test' and stepone==False:
+                print("Evaluation on test")
+                try:
+                    """ calculate corpus bleu score """
+                    weights_list = [(1.0,), (0.5, 0.5), (1./3., 1./3., 1./3.), (0.25, 0.25, 0.25, 0.25)]
+                    for weight in weights_list:
+                        corpus_bleu_score = corpus_bleu(
+                            target_tokens_list, pred_tokens_list, weights=weight)
+                        print(f'corpus BLEU-{len(list(weight))} score:', corpus_bleu_score)
+
+                    """ calculate rouge score """
+                    rouge = Rouge()
+                    rouge_scores = rouge.get_scores(pred_string_list, target_string_list, avg=True, ignore_empty=True)
+                    print(rouge_scores)
+                    """ calculate bertscore"""
+                    P, R, F1 = score(pred_string_list, target_string_list, lang='en', device=device, model_type="bert-large-uncased")
+                    print(f"bert_score P: {np.mean(np.array(P))}")
+                    print(f"bert_score R: {np.mean(np.array(R))}")
+                    print(f"bert_score F1: {np.mean(np.array(F1))}")
+                except:
+                    print("failed")
+
+        print()
+    torch.cuda.empty_cache()
+
+    print(f"Train losses: {train_losses}")
+    print(f"Val losses: {val_losses}")
+
+    time_elapsed = time.time() - since
+    print('Training complete in {:.0f}m {:.0f}s'.format(
+        time_elapsed // 60, time_elapsed % 60))
+    print('Best val loss: {:4f}'.format(best_loss))
+    torch.save(model.state_dict(), checkpoint_path_last)
+    print(f'update last checkpoint: {checkpoint_path_last}')
+
+    return model
+
+def show_require_grad_layers(model):
+    print()
+    print(' require_grad layers:')
+    # sanity check
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(' ', name)
 
 if __name__ == '__main__':
-    # Get config arguments
-    args = config_new_dataset.get_config('train_decoding')
-    
-    # Set random seeds
+    CHECKPOINT_DIR_BEST = '/kaggle/working/checkpoints/decoding_raw/best'
+    CHECKPOINT_DIR_LAST = '/kaggle/working/checkpoints/decoding_raw/last'
+    CONFIG_DIR = '/kaggle/working/config/decoding_raw'
+    LOG_DIR = "runs_h"
+    os.makedirs(CHECKPOINT_DIR_BEST, exist_ok=True)
+    os.makedirs(CHECKPOINT_DIR_LAST, exist_ok=True)
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+
+    args = config.get_config('train_decoding')
+
+    ''' config param'''
+    dataset_setting = 'unique_sent'
+
+    num_epochs_step1 = args['num_epoch_step1']
+    num_epochs_step2 = args['num_epoch_step2']
+    step1_lr = args['learning_rate_step1']
+    step2_lr = args['learning_rate_step2']
+    batch_size = args['batch_size']
+    model_name = args['model_name']
+    task_name = args['task_name']
+    save_path = args['save_path']
+
+    skip_step_one = args['skip_step_one']
+    load_step1_checkpoint = args['load_step1_checkpoint']
+    upload_first_run_step1 = args['upload_first_run_step1']
+    use_random_init = False
+
+    if use_random_init and skip_step_one:
+        step2_lr = 5*1e-4
+
+    print(f'[INFO]using model: {model_name}')
+    print(f'[INFO]using use_random_init: {use_random_init}')
+
+    if skip_step_one:
+        save_name = f'{task_name}_finetune_{model_name}_skipstep1_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}_{dataset_setting}'
+    else:
+        save_name = f'{task_name}_finetune_{model_name}_2steptraining_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}_{dataset_setting}'
+
+    if use_random_init:
+        save_name = 'randinit_' + save_name
+
+    output_checkpoint_name_best = f'/kaggle/working/checkpoints/decoding_raw/best/{save_name}.pt'
+    output_checkpoint_name_last = f'/kaggle/working/checkpoints/decoding_raw/last/{save_name}.pt'
+
+    ''' set random seeds '''
     seed_val = 312
     np.random.seed(seed_val)
     torch.manual_seed(seed_val)
     torch.cuda.manual_seed_all(seed_val)
-    
-    # Setup paths
-    os.makedirs(args['save_path'], exist_ok=True)
-    log_dir = os.path.join(args['save_path'], 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Add log dir to args
-    args['log_dir'] = log_dir
-    
-    # Create trainer and start training
-    trainer = Trainer(args)
-    trainer.train()
 
-    print("\nTraining complete!")
+    ''' set up device '''
+    if torch.cuda.is_available():
+        dev = args['cuda']
+    else:
+        dev = "cpu"
+    device = torch.device(dev)
+    print(f'[INFO]using device {dev}')
+    print()
+
+    tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+
+    # train dataset
+    train_set = data_raw.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
+    # dev dataset
+    dev_set = data_raw.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
+    # test dataset
+    test_set = data_raw.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
+
+    dataset_sizes = {'train': len(train_set), 'dev': len(dev_set), 'test': len(test_set)}
+    print('[INFO]train_set size: ', len(train_set))
+    print('[INFO]dev_set size: ', len(dev_set))
+    print('[INFO]test_set size: ', len(test_set))
+
+    # train dataloader
+    train_dataloader = DataLoader(
+        train_set, batch_size=batch_size, shuffle=True, num_workers=0)
+    # dev dataloader
+    val_dataloader = DataLoader(
+        dev_set, batch_size=1, shuffle=False, num_workers=0)
+    # test dataloader
+    test_dataloader = DataLoader(
+        test_set, batch_size=1, shuffle=False, num_workers=0)
+
+    dataloaders = {
+        'train': train_dataloader,
+        'dev': val_dataloader, 
+        'test': test_dataloader
+    }
+
+    ''' set up model '''
+    if model_name == 'BrainTranslator':
+        pretrained = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
+        model = model_decoding_raw.BrainTranslator(
+            pretrained, 
+            in_feature=192,  # BCI data has 192 features
+            decoder_embedding_size=1024,
+            additional_encoder_nhead=8, 
+            additional_encoder_dim_feedforward=4096
+        )
+
+    model.to(device)
+
+    ''' training loop '''
+    ######################################################
+    # closely follow BART paper
+    if model_name in ['BrainTranslator']:
+        for name, param in model.named_parameters():
+            if param.requires_grad and 'pretrained' in name:
+                if ('shared' in name) or ('embed_positions' in name) or ('encoder.layers.0' in name):
+                    continue
+                else:
+                    param.requires_grad = False
+
+    if skip_step_one:
+        if load_step1_checkpoint:
+            stepone_checkpoint = args['step1_checkpoint_path']
+            print(f'skip step one, load checkpoint: {stepone_checkpoint}')
+            model.load_state_dict(torch.load(stepone_checkpoint))
+        else:
+            print('skip step one, start from scratch at step two')
+
+        ##################################################################################
+
+        '''step two training'''
+        ######################################################
+
+        model.freeze_pretrained_brain()
+
+        ''' set up optimizer and scheduler'''
+        optimizer_step2 = optim.SGD(filter(
+                lambda p: p.requires_grad, model.parameters()), lr=step2_lr, momentum=0.9)
+
+        exp_lr_scheduler_step2 = lr_scheduler.CyclicLR(optimizer_step2, 
+                        base_lr = 0.0000005, # Initial learning rate which is the lower boundary in the cycle for each parameter group
+                        max_lr = 0.00005, # Upper learning rate boundaries in the cycle for each parameter group
+                        mode = "triangular2") #triangular2
+
+        ''' set up loss function '''
+        criterion = nn.CrossEntropyLoss()
+
+        print()
+        print('=== start Step2 training ... ===')
+        # print training layers
+        show_require_grad_layers(model)
+
+        model.to(device)
+
+        '''main loop'''
+        trained_model = train_model(dataloaders, device, model, criterion, optimizer_step2, exp_lr_scheduler_step2, num_epochs=num_epochs_step2,
+                                    checkpoint_path_best=output_checkpoint_name_best, checkpoint_path_last=output_checkpoint_name_last, stepone=False)
+
+        train_writer.flush()
+        train_writer.close()
+        val_writer.flush()
+        val_writer.close()
+        dev_writer.flush()
+        dev_writer.close()
+
+        #################################################################################
+
+    else:
+        '''step one training'''
+        ######################################################
+        if upload_first_run_step1:
+            stepone_checkpoint_not_first = args['step1_checkpoint_not_first_path']
+            print(f'not first run for step 1, load checkpoint: {stepone_checkpoint_not_first}')
+            model.load_state_dict(torch.load(stepone_checkpoint_not_first))
+        
+        model.to(device)
+
+        ''' set up optimizer and scheduler'''
+        optimizer_step1 = optim.SGD(filter(
+            lambda p: p.requires_grad, model.parameters()), lr=step1_lr, momentum=0.9)
+
+        exp_lr_scheduler_step1 = lr_scheduler.CyclicLR(optimizer_step1, 
+                     base_lr = step1_lr, # Initial learning rate which is the lower boundary in the cycle for each parameter group
+                     max_lr = 5e-3, # Upper learning rate boundaries in the cycle for each parameter group
+                     mode = "triangular2") #triangular2
+
+        ''' set up loss function '''
+        criterion = nn.MSELoss()
+        model.freeze_pretrained_bart()
+
+        print('=== start Step1 training ... ===')
+        # print training layers
+        show_require_grad_layers(model)
+        
+        # return best loss model from step1 training
+        model = train_model(dataloaders, device, model, criterion, optimizer_step1, exp_lr_scheduler_step1, num_epochs=num_epochs_step1,
+                            checkpoint_path_best=output_checkpoint_name_best, checkpoint_path_last=output_checkpoint_name_last, stepone=True)
+        
+        train_writer.flush()
+        train_writer.close()
+        val_writer.flush()
+        val_writer.close()
+        dev_writer.flush()
+        dev_writer.close()        
+    
+    ######################################################
