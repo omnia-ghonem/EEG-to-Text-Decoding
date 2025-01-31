@@ -70,10 +70,9 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num
                 target_string_list = []
                 pred_tokens_list = []
                 pred_string_list = []
-                
-            with tqdm(dataloaders[phase], unit="batch") as tepoch:
-                for batch_idx, (neural_data, seq_len, input_masks, _, input_mask_invert, target_ids, target_mask, subject_batch) in enumerate(tepoch):
 
+            with tqdm(dataloaders[phase], unit="batch") as tepoch:
+                for batch_idx, (neural_data, seq_len, input_masks, input_mask_invert, target_ids, target_mask, subject_batch) in enumerate(tepoch):
                     # Move data to device
                     input_embeddings_batch = neural_data.float().to(device)
                     input_masks_batch = input_masks.to(device)
@@ -202,7 +201,7 @@ def show_require_grad_layers(model):
         if param.requires_grad:
             print(f'  {name}')
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     CHECKPOINT_DIR_BEST = '/kaggle/working/checkpoints/decoding_raw/best'
     CHECKPOINT_DIR_LAST = '/kaggle/working/checkpoints/decoding_raw/last'
     os.makedirs(CHECKPOINT_DIR_BEST, exist_ok=True)
@@ -210,19 +209,14 @@ if __name__ == '__main__':
     dataset_setting = 'unique_sent'
     args = config.get_config('train_decoding')
 
-
     num_epochs_step1 = args['num_epoch_step1']
     num_epochs_step2 = args['num_epoch_step2']
     step1_lr = args['learning_rate_step1']
     step2_lr = args['learning_rate_step2']
-
     batch_size = args['batch_size']
-
     model_name = args['model_name']
     task_name = args['task_name']
-
     save_path = args['save_path']
-
     skip_step_one = args['skip_step_one']
     load_step1_checkpoint = args['load_step1_checkpoint']
     upload_first_run_step1 = args['upload_first_run_step1']
@@ -234,17 +228,13 @@ if __name__ == '__main__':
     print(f'[INFO]eeg type {eeg_type_choice}')
     bands_choice = args['eeg_bands']
     print(f'[INFO]using bands {bands_choice}')
-    # Save names for checkpoints
 
     if torch.cuda.is_available():
-        # dev = "cuda:3"
         dev = args['cuda']
     else:
         dev = "cpu"
     device = torch.device(dev)
     print(f'[INFO]using device {dev}')
-
-
     
     if skip_step_one:
         save_name = f'{task_name}_finetune_{model_name}_skipstep1_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}_{dataset_setting}'
@@ -257,22 +247,17 @@ if __name__ == '__main__':
     output_checkpoint_name_best = os.path.join(CHECKPOINT_DIR_BEST, f'{save_name}.pt')
     output_checkpoint_name_last = os.path.join(CHECKPOINT_DIR_LAST, f'{save_name}.pt')
 
-
     with open(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as out_config:
         json.dump(args, out_config, indent=4)
-    # Set random seeds
+
     torch.manual_seed(42)
     np.random.seed(42)
 
-
-    # Set up device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'Using device: {device}')
 
-    # Initialize tokenizer
     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
 
-    # Set up datasets
     train_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
     dev_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
     test_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
@@ -281,7 +266,6 @@ if __name__ == '__main__':
     print(f'Dev set size: {len(dev_set)}')
     print(f'Test set size: {len(test_set)}')
 
-    # Create dataloaders
     train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     val_dataloader = DataLoader(dev_set, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)
     test_dataloader = DataLoader(test_set, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)
@@ -292,7 +276,6 @@ if __name__ == '__main__':
         'test': test_dataloader
     }
 
-    # Initialize model
     bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
     model = model_decoding_raw_new_dataset.BrainTranslator(
         bart, 
@@ -302,7 +285,6 @@ if __name__ == '__main__':
         additional_encoder_dim_feedforward=2048
     ).to(device)
 
-
     if skip_step_one:
         if load_step1_checkpoint:
             stepone_checkpoint = '/kaggle/input/eeg-to-text-gpt2/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_skipstep1_b20_10_10_5e-05_5e-05_unique_sent.pt'
@@ -311,33 +293,24 @@ if __name__ == '__main__':
         else:
             print('skip step one, start from scratch at step two')
 
-        ##################################################################################
-
-        '''step two training'''
-        ######################################################
-
         model.freeze_pretrained_brain()
 
-        ''' set up optimizer and scheduler'''
         optimizer_step2 = optim.SGD(filter(
                 lambda p: p.requires_grad, model.parameters()), lr=step2_lr, momentum=0.9)
 
         exp_lr_scheduler_step2 = lr_scheduler.CyclicLR(optimizer_step2, 
-                        base_lr = 0.0000005, # Initial learning rate which is the lower boundary in the cycle for each parameter group
-                        max_lr = 0.00005, # Upper learning rate boundaries in the cycle for each parameter group
-                        mode = "triangular2") #triangular2
+                        base_lr = 0.0000005,
+                        max_lr = 0.00005,
+                        mode = "triangular2")
 
-        ''' set up loss function '''
         criterion = nn.CrossEntropyLoss()
 
         print()
         print('=== start Step2 training ... ===')
-        # print training layers
         show_require_grad_layers(model)
 
         model.to(device)
 
-        '''main loop'''
         trained_model = train_model(dataloaders, device, model, criterion, optimizer_step2, exp_lr_scheduler_step2, num_epochs=num_epochs_step2,
                                     checkpoint_path_best=output_checkpoint_name_best, checkpoint_path_last=output_checkpoint_name_last, stepone=False)
 
@@ -348,36 +321,28 @@ if __name__ == '__main__':
         dev_writer.flush()
         dev_writer.close()
 
-        #################################################################################
-
     else:
-        '''step one training'''
-        ######################################################
-        if upload_first_run_step1 :
+        if upload_first_run_step1:
             stepone_checkpoint_not_first = '/kaggle/input/xlnet-step1-second-time/checkpoints/decoding_raw/best/task1_task2_taskNRv2_finetune_BrainTranslator_2steptraining_b20_10_2_5e-05_5e-05_unique_sent.pt'
             print(f'not first run for step 1, load checkpoint: {stepone_checkpoint_not_first}')
             model.load_state_dict(torch.load(stepone_checkpoint_not_first))
         
         model.to(device)
 
-        ''' set up optimizer and scheduler'''
         optimizer_step1 = optim.SGD(filter(
             lambda p: p.requires_grad, model.parameters()), lr=step1_lr, momentum=0.9)
 
         exp_lr_scheduler_step1 = lr_scheduler.CyclicLR(optimizer_step1, 
-                     base_lr = step1_lr, # Initial learning rate which is the lower boundary in the cycle for each parameter group
-                     max_lr = 5e-3, # Upper learning rate boundaries in the cycle for each parameter group
-                     mode = "triangular2") #triangular2
+                     base_lr = step1_lr,
+                     max_lr = 5e-3,
+                     mode = "triangular2")
 
-        ''' set up loss function '''
         criterion = nn.MSELoss()
         model.freeze_pretrained_bart()
 
         print('=== start Step1 training ... ===')
-        # print training layers
         show_require_grad_layers(model)
         
-        # return best loss model from step1 training
         model = train_model(dataloaders, device, model, criterion, optimizer_step1, exp_lr_scheduler_step1, num_epochs=num_epochs_step1,
                             checkpoint_path_best=output_checkpoint_name_best, checkpoint_path_last=output_checkpoint_name_last, stepone=True)
         
@@ -386,6 +351,5 @@ if __name__ == '__main__':
         val_writer.flush()
         val_writer.close()
         dev_writer.flush()
-        dev_writer.close()        
-    
-    ######################################################
+        dev_writer.close()
+
