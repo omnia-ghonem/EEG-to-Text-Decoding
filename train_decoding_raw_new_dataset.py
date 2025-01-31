@@ -207,17 +207,47 @@ if __name__ == '__main__':
     CHECKPOINT_DIR_LAST = '/kaggle/working/checkpoints/decoding_raw/last'
     os.makedirs(CHECKPOINT_DIR_BEST, exist_ok=True)
     os.makedirs(CHECKPOINT_DIR_LAST, exist_ok=True)
-
-    # Configuration
-    num_epochs_step1 = 10  # First step training epochs
-    num_epochs_step2 = 25  # Second step training epochs
+    dataset_setting = 'unique_sent'
+    args = config.get_config('train_decoding')
     step1_lr = 5e-5       # First step learning rate
     step2_lr = 5e-5       # Second step learning rate
-    batch_size = 32
-    skip_step_one = False  # Whether to skip step one training
+
+    num_epochs_step1 = args['num_epoch_step1']
+    num_epochs_step2 = args['num_epoch_step2']
+    step1_lr = args['learning_rate_step1']
+    step2_lr = args['learning_rate_step2']
+
+    batch_size = args['batch_size']
+
+    model_name = args['model_name']
+    task_name = args['task_name']
+
+    save_path = args['save_path']
+
+    skip_step_one = args['skip_step_one']
+    load_step1_checkpoint = args['load_step1_checkpoint']
+    upload_first_run_step1 = args['upload_first_run_step1']
     use_random_init = False
 
+    subject_choice = args['subjects']
+    print(f'![Debug]using {subject_choice}')
+    eeg_type_choice = args['eeg_type']
+    print(f'[INFO]eeg type {eeg_type_choice}')
+    bands_choice = args['eeg_bands']
+    print(f'[INFO]using bands {bands_choice}')
     # Save names for checkpoints
+
+    if torch.cuda.is_available():
+        # dev = "cuda:3"
+        dev = args['cuda']
+    else:
+        dev = "cpu"
+    device = torch.device(dev)
+    print(f'[INFO]using device {dev}')
+    with open(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as out_config:
+        json.dump(args, out_config, indent=4)
+
+    
     if skip_step_one:
         save_name = f'bci_skipstep1_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}'
     else:
@@ -232,8 +262,7 @@ if __name__ == '__main__':
     # Set random seeds
     torch.manual_seed(42)
     np.random.seed(42)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(42)
+
 
     # Set up device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
