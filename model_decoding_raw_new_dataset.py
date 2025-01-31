@@ -3,6 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_sequence
 
+def cross_entropy(preds, targets, reduction='none'):
+    log_softmax = nn.LogSoftmax(dim=-1)
+    loss = (-targets * log_softmax(preds)).sum(1)
+    if reduction == "none":
+        return loss
+    elif reduction == "mean":
+        return loss.mean()
+
 class ProjectionHead(nn.Module):
     def __init__(
         self,
@@ -63,9 +71,19 @@ class FeatureEmbedded(nn.Module):
         
         for x_sentence, length_sentence in zip(x, lengths):
             # Handle single sample
-            if len(x_sentence.shape) == 2:
+            if len(x_sentence.shape) == 2:  # shape should be [seq_len, features]
+                x_sentence = x_sentence.unsqueeze(0)  # Add batch dimension: [1, seq_len, features]
+            elif len(x_sentence.shape) == 3:  # If already batched
+                pass
+            else:  # If it's 1D, reshape it
+                x_sentence = x_sentence.view(-1, self.input_dim)
                 x_sentence = x_sentence.unsqueeze(0)
                 
+            # Ensure the sequence is properly shaped
+            if x_sentence.shape[-1] != self.input_dim:
+                if x_sentence.shape[1] == self.input_dim:
+                    x_sentence = x_sentence.transpose(1, 2)
+            
             # Ensure length is a tensor
             length_tensor = torch.tensor([length_sentence], dtype=torch.int64)
             
@@ -95,7 +113,8 @@ class FeatureEmbedded(nn.Module):
             batch_embeddings.append(sentence_embedding)
         
         # Stack all embeddings
-        return torch.stack(batch_embeddings, 0).to(device)
+        stacked_embeddings = torch.stack(batch_embeddings, 0).to(device)
+        return stacked_embeddings
 
 class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=192, decoder_embedding_size=1024, additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
@@ -144,17 +163,25 @@ class BrainTranslator(nn.Module):
         if len(lengths_batch.shape) == 0:
             lengths_batch = lengths_batch.unsqueeze(0)
             
+        # Ensure input_embeddings_batch has correct shape [batch_size, seq_len, features]
+        if len(input_embeddings_batch.shape) == 2:
+            input_embeddings_batch = input_embeddings_batch.unsqueeze(0)
+            
+        if input_embeddings_batch.shape[-1] != 192:  # If features is not in the last dimension
+            input_embeddings_batch = input_embeddings_batch.transpose(-1, -2)
+            
         # Feature embedding
         feature_embedding = self.feature_embedded(input_embeddings_batch, lengths_batch, device)
         if len(feature_embedding.shape)==2:
-            feature_embedding = torch.unsqueeze(feature_embedding,0)
+            feature_embedding = feature_embedding.unsqueeze(0)
         encoded_embedding = self.fc(feature_embedding)
 
         # Subject-independent processing
-        tmp = torch.unsqueeze(encoded_embedding, 1)
+        tmp = encoded_embedding.unsqueeze(1)
         tmp = self.conv1d_point(tmp)
-        tmp = torch.swapaxes(tmp, 1, 2)
-        tmp = torch.squeeze(tmp)
+        tmp = tmp.transpose(1, 2)  # Using transpose instead of swapaxes for clarity
+        if tmp.shape[0] == 1:  # If batch size is 1
+            tmp = tmp.squeeze(0)
         
         # Add positional embeddings
         brain_embedding = tmp + self.pos_embedding[:, :tmp.size(1), :]
