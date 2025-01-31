@@ -7,7 +7,7 @@ from transformers import BartTokenizer
 from torch.nn.utils.rnn import pad_sequence
 
 class HandwritingBCI_Dataset(Dataset):
-    def __init__(self, data_dir="/kaggle/input/handwriting-bci", mode="sentences", 
+    def __init__(self, data_dir="/kaggle/input/handwriting-bci/handwritingBCIData/Datasets", mode="sentences", 
                  tokenizer=None, max_len=201, phase='train'):
         """
         Dataset loader for Handwriting BCI dataset.
@@ -39,78 +39,123 @@ class HandwritingBCI_Dataset(Dataset):
         
         # Load data from sessions
         for session in self.session_ids:
-            file_path = os.path.join(data_dir, "Datasets", session, f"{mode}.mat")
-            if not os.path.exists(file_path):
+            try:
+                # Construct path to session directory
+                session_dir = os.path.join(data_dir, session)
+                
+                if mode == "sentences":
+                    file_path = os.path.join(session_dir, "sentences.mat")
+                else:
+                    file_path = os.path.join(session_dir, "chars.mat")
+                
+                if not os.path.exists(file_path):
+                    print(f"Warning: File not found - {file_path}")
+                    continue
+                
+                print(f"Loading data from {file_path}")
+                data = scipy.io.loadmat(file_path)
+                
+                # Extract neural data and text
+                neural_data = data.get('neuralActivityTimeSeries', [])  # Shape: (n_trials, n_timepoints, n_channels)
+                text_data = data.get('sentencePrompt', []) if mode == "sentences" else data.get('characterCues', [])
+                
+                if len(neural_data) == 0 or len(text_data) == 0:
+                    print(f"Warning: Empty data in {file_path}")
+                    continue
+                
+                print(f"Found {len(neural_data)} trials in {session}")
+                
+                # Process each trial
+                for trial_idx in range(len(neural_data)):
+                    sample = self.get_input_sample(
+                        neural_data[trial_idx], 
+                        text_data[trial_idx][0] if mode == "sentences" else text_data[trial_idx]
+                    )
+                    if sample is not None:
+                        self.inputs.append(sample)
+                        
+            except Exception as e:
+                print(f"Error processing {session}: {str(e)}")
                 continue
-                
-            data = scipy.io.loadmat(file_path)
-            
-            # Extract neural data and labels
-            if mode == "sentences":
-                neural_data = data["neuralActivityTimeSeries"]
-                labels = data["sentencePrompt"]
-            else:  # characters mode
-                neural_data = data["neuralActivityCube_A"]
-                labels = data["characterCues"]
-                
-            for i in range(len(labels)):
-                sample = self.get_input_sample(neural_data[i], labels[i])
-                if sample:
-                    self.inputs.append(sample)
                     
         print(f'[INFO] Loaded {len(self.inputs)} samples from {len(self.session_ids)} sessions for {phase}')
 
     def normalize_neural_data(self, neural_data):
         """Normalize neural data using z-score normalization"""
-        mean = torch.mean(neural_data, dim=0)
-        std = torch.std(neural_data, dim=0)
+        mean = np.mean(neural_data, axis=0, keepdims=True)
+        std = np.std(neural_data, axis=0, keepdims=True)
         return (neural_data - mean) / (std + 1e-8)
 
-    def get_input_sample(self, neural_activity, label):
+    def get_input_sample(self, neural_activity, text):
         """Process a single input sample
         Args:
             neural_activity: Raw neural activity data
-            label: Text label/prompt
+            text: Text label/prompt
         Returns:
             Dictionary containing processed inputs
         """
-        input_sample = {}
-        
-        # Convert label to string if needed
-        if isinstance(label, np.ndarray):
-            label = str(label[0])
+        try:
+            input_sample = {}
             
-        # Tokenize target text
-        target_tokenized = self.tokenizer(
-            label, 
-            padding='max_length',
-            max_length=self.max_len,
-            truncation=True,
-            return_tensors='pt',
-            return_attention_mask=True
-        )
-        
-        input_sample['target_ids'] = target_tokenized['input_ids'][0]
-        input_sample['target_mask'] = target_tokenized['attention_mask'][0]
-        
-        # Process neural data
-        neural_tensor = torch.tensor(neural_activity, dtype=torch.float32)
-        neural_tensor = self.normalize_neural_data(neural_tensor)
-        
-        # Pad or truncate to max_len
-        if neural_tensor.shape[0] < self.max_len:
-            padding = torch.zeros((self.max_len - neural_tensor.shape[0], neural_tensor.shape[1]))
-            neural_tensor = torch.cat((neural_tensor, padding), dim=0)
-        else:
-            neural_tensor = neural_tensor[:self.max_len, :]
+            # Convert text to string if needed
+            if isinstance(text, bytes):
+                text = text.decode('utf-8')
+            elif not isinstance(text, str):
+                text = str(text)
             
-        input_sample['input_embeddings'] = neural_tensor
-        input_sample['input_attn_mask'] = torch.ones(self.max_len)  # 1 indicates valid positions
-        input_sample['input_attn_mask_invert'] = torch.zeros(self.max_len)  # 0 indicates valid positions
-        input_sample['seq_len'] = torch.tensor(min(len(label), self.max_len))
-        input_sample['subject'] = 't5'  # Single subject dataset
-        
-        return input_sample
+            # Clean text
+            text = text.strip()
+            if not text:
+                return None
+                
+            # Tokenize target text
+            target_tokenized = self.tokenizer(
+                text, 
+                padding='max_length',
+                max_length=self.max_len,
+                truncation=True,
+                return_tensors='pt',
+                return_attention_mask=True
+            )
+            
+            input_sample['target_ids'] = target_tokenized['input_ids'][0]
+            input_sample['target_mask'] = target_tokenized['attention_mask'][0]
+            
+            # Process neural data
+            if isinstance(neural_activity, np.ndarray):
+                # Normalize neural data
+                neural_activity = self.normalize_neural_data(neural_activity)
+                
+                # Convert to tensor
+                neural_tensor = torch.tensor(neural_activity, dtype=torch.float32)
+                
+                # Ensure shape is correct (time, channels)
+                if len(neural_tensor.shape) == 1:
+                    neural_tensor = neural_tensor.unsqueeze(1)
+                elif len(neural_tensor.shape) > 2:
+                    neural_tensor = neural_tensor.reshape(-1, neural_tensor.shape[-1])
+                
+                # Pad or truncate to max_len
+                if neural_tensor.shape[0] < self.max_len:
+                    padding = torch.zeros((self.max_len - neural_tensor.shape[0], neural_tensor.shape[1]))
+                    neural_tensor = torch.cat((neural_tensor, padding), dim=0)
+                else:
+                    neural_tensor = neural_tensor[:self.max_len, :]
+                
+                input_sample['input_embeddings'] = neural_tensor
+                input_sample['input_attn_mask'] = torch.ones(self.max_len)
+                input_sample['input_attn_mask_invert'] = torch.zeros(self.max_len)
+                input_sample['seq_len'] = torch.tensor(min(neural_tensor.shape[0], self.max_len))
+                input_sample['subject'] = 't5'
+                
+                return input_sample
+            else:
+                print(f"Warning: Invalid neural activity data type: {type(neural_activity)}")
+                return None
+                
+        except Exception as e:
+            print(f"Error processing sample: {str(e)}")
+            return None
 
     def __len__(self):
         return len(self.inputs)
@@ -129,11 +174,33 @@ class HandwritingBCI_Dataset(Dataset):
 
 if __name__ == '__main__':
     # Test dataset loading
-    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-    train_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
-    dev_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
-    test_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
+    print("\nTesting dataset loading...")
     
+    data_dir = "/kaggle/input/handwriting-bci/handwritingBCIData/Datasets"
+    print(f"Looking for data in: {data_dir}")
+    
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
+    
+    print("\nLoading train set...")
+    train_set = HandwritingBCI_Dataset(data_dir=data_dir, mode="sentences", tokenizer=tokenizer, phase='train')
     print(f'Train set size: {len(train_set)}')
+    
+    print("\nLoading dev set...")
+    dev_set = HandwritingBCI_Dataset(data_dir=data_dir, mode="sentences", tokenizer=tokenizer, phase='dev')
     print(f'Dev set size: {len(dev_set)}')
+    
+    print("\nLoading test set...")
+    test_set = HandwritingBCI_Dataset(data_dir=data_dir, mode="sentences", tokenizer=tokenizer, phase='test')
     print(f'Test set size: {len(test_set)}')
+    
+    if len(train_set) > 0:
+        # Test a sample
+        sample = train_set[0]
+        print("\nSample shapes:")
+        print(f"Neural data: {sample[0].shape}")
+        print(f"Sequence length: {sample[1]}")
+        print(f"Attention mask: {sample[2].shape}")
+        
+        # Test tokenization
+        text = tokenizer.decode(sample[4], skip_special_tokens=True)
+        print(f"\nDecoded text sample: {text}")
