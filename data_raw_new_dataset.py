@@ -164,7 +164,6 @@ class HandwritingBCI_Dataset(Dataset):
             input_sample['input_embeddings'],
             input_sample['seq_len'],
             input_sample['input_attn_mask'],
-            input_sample['input_attn_mask'],
             input_sample['input_attn_mask_invert'], 
             input_sample['target_ids'],
             input_sample['target_mask'],
