@@ -70,9 +70,9 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num
                 target_string_list = []
                 pred_tokens_list = []
                 pred_string_list = []
-
+                
             with tqdm(dataloaders[phase], unit="batch") as tepoch:
-                for batch_idx, (neural_data, seq_len, input_masks, input_mask_invert, target_ids, target_mask, subject_batch) in enumerate(tepoch):
+                for batch_idx, (neural_data, seq_len, input_masks, _, input_mask_invert, target_ids, target_mask, subject_batch) in enumerate(tepoch):
 
                     # Move data to device
                     input_embeddings_batch = neural_data.float().to(device)
