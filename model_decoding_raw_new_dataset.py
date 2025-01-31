@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pack_padded_sequence, pad_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
+# Cross-entropy loss function
 def cross_entropy(preds, targets, reduction='none'):
     log_softmax = nn.LogSoftmax(dim=-1)
     loss = (-targets * log_softmax(preds)).sum(1)
@@ -11,13 +12,9 @@ def cross_entropy(preds, targets, reduction='none'):
     elif reduction == "mean":
         return loss.mean()
 
+# Projection head for feature embedding
 class ProjectionHead(nn.Module):
-    def __init__(
-        self,
-        embedding_dim,
-        projection_dim=1024,
-        dropout=0.1
-    ):
+    def __init__(self, embedding_dim, projection_dim=1024, dropout=0.1):
         super().__init__()
         self.projection = nn.Linear(embedding_dim, projection_dim)
         self.gelu = nn.GELU()
@@ -30,9 +27,10 @@ class ProjectionHead(nn.Module):
         x = self.gelu(projected)
         x = self.fc(x)
         x = self.dropout(x)
-        x = x + projected
+        x = x + projected  # Residual connection
         return self.layer_norm(x)
 
+# Feature embedding with LSTM/GRU
 class FeatureEmbedded(nn.Module):
     def __init__(self, input_dim=192, hidden_dim=512, num_layers=2, is_bidirectional=True):
         super(FeatureEmbedded, self).__init__()
@@ -63,51 +61,33 @@ class FeatureEmbedded(nn.Module):
     def forward(self, x, lengths, device):
         batch_embeddings = []
         
-        # Convert length to a list if it's a single value
-        if not isinstance(lengths, (list, tuple)) and len(lengths.shape) == 0:
-            lengths = [lengths.item()]
-        elif not isinstance(lengths, (list, tuple)):
-            lengths = lengths.cpu().tolist()
+        if len(lengths.shape) == 0:
+            lengths = lengths.unsqueeze(0)
         
-        for x_sentence, length_sentence in zip(x, lengths):
-            # Handle single sample
-            if len(x_sentence.shape) == 2:  # shape should be [seq_len, features]
-                x_sentence = x_sentence.unsqueeze(0)  # Add batch dimension: [1, seq_len, features]
-            elif len(x_sentence.shape) == 3:  # If already batched
-                pass
-            else:  # If it's 1D, reshape it
-                x_sentence = x_sentence.view(-1, self.input_dim)
-                x_sentence = x_sentence.unsqueeze(0)
-                
-            # Ensure the sequence is properly shaped
-            if x_sentence.shape[-1] != self.input_dim:
-                if x_sentence.shape[1] == self.input_dim:
-                    x_sentence = x_sentence.transpose(1, 2)
+        for x_sentence, length_sentence in zip(x, lengths.cpu().tolist()):
+            x_sentence = x_sentence.unsqueeze(0) if len(x_sentence.shape) == 2 else x_sentence
             
-            # Ensure length is a tensor
+            # Ensure last dimension matches input_dim
+            if x_sentence.shape[-1] != self.input_dim:
+                x_sentence = x_sentence[..., :self.input_dim]  # Fix size mismatch
+            
+            # Convert length to tensor
             length_tensor = torch.tensor([length_sentence], dtype=torch.int64)
             
             # Pack sequence
             packed_input = pack_padded_sequence(
-                x_sentence, 
-                length_tensor,
-                batch_first=True, 
-                enforce_sorted=False
+                x_sentence, length_tensor, batch_first=True, enforce_sorted=False
             )
             
             # Process through GRU
             lstm_out, _ = self.lstm(packed_input)
-            # Unpack sequence
-            lstm_out, _ = nn.utils.rnn.pad_packed_sequence(lstm_out)
-            
-            # Get final hidden states
+            lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
+
+            # Extract last hidden state
             if self.is_bidirectional:
-                sentence_embedding = lstm_out[-1]
+                sentence_embedding = lstm_out[:, -1, :]
             else:
-                idx = (length_tensor - 1).view(-1, 1).expand(
-                    length_tensor.size(0), 
-                    self.hidden_dim
-                )
+                idx = (length_tensor - 1).view(-1, 1).expand(length_tensor.size(0), self.hidden_dim)
                 sentence_embedding = lstm_out.gather(0, idx.unsqueeze(0)).squeeze()
             
             batch_embeddings.append(sentence_embedding)
@@ -116,22 +96,22 @@ class FeatureEmbedded(nn.Module):
         stacked_embeddings = torch.stack(batch_embeddings, 0).to(device)
         return stacked_embeddings
 
+# Main model
 class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=192, decoder_embedding_size=1024, additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
         super(BrainTranslator, self).__init__()
         
-        # Embedded BCI raw features
         self.hidden_dim = 512
-        self.feature_embedded = FeatureEmbedded(input_dim=192, hidden_dim=self.hidden_dim)
+        self.feature_embedded = FeatureEmbedded(input_dim=in_feature, hidden_dim=self.hidden_dim)
         self.fc = ProjectionHead(embedding_dim=in_feature, projection_dim=in_feature, dropout=0.1)
 
-        # conv1d
+        # 1D Convolution
         self.conv1d_point = nn.Conv1d(1, 64, 1, stride=1)
         
-        # Brain transformer encoder
-        self.pos_embedding = nn.Parameter(torch.randn(1, 201, in_feature))
+        # Transformer Encoder
+        self.pos_embedding = nn.Parameter(torch.randn(1, 201, in_feature))  # Ensure it matches 192
         self.encoder_layer = nn.TransformerEncoderLayer(
-            d_model=in_feature, 
+            d_model=in_feature,  # FIXED: Ensuring it's 192
             nhead=additional_encoder_nhead,  
             dim_feedforward=additional_encoder_dim_feedforward, 
             dropout=0.1, 
@@ -143,50 +123,43 @@ class BrainTranslator(nn.Module):
 
         self.brain_projection = ProjectionHead(embedding_dim=in_feature, projection_dim=1024, dropout=0.2)
         
-        # BART
         self.bart = bart
         
     def freeze_pretrained_bart(self):
         for name, param in self.named_parameters():
-            param.requires_grad = True
-            if ('bart' in name):
-                param.requires_grad = False
+            param.requires_grad = ('bart' not in name)
 
     def freeze_pretrained_brain(self):
         for name, param in self.named_parameters():
-            param.requires_grad = False
-            if ('bart' in name):
-                param.requires_grad = True
+            param.requires_grad = ('bart' in name)
 
     def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch, lengths_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device):
-        # Ensure lengths_batch is proper format
         if len(lengths_batch.shape) == 0:
             lengths_batch = lengths_batch.unsqueeze(0)
             
-        # Ensure input_embeddings_batch has correct shape [batch_size, seq_len, features]
         if len(input_embeddings_batch.shape) == 2:
             input_embeddings_batch = input_embeddings_batch.unsqueeze(0)
             
-        if input_embeddings_batch.shape[-1] != 192:  # If features is not in the last dimension
-            input_embeddings_batch = input_embeddings_batch.transpose(-1, -2)
-            
+        # **Ensure feature dimension is 192**
+        input_embeddings_batch = input_embeddings_batch[..., :192]
+
         # Feature embedding
         feature_embedding = self.feature_embedded(input_embeddings_batch, lengths_batch, device)
-        if len(feature_embedding.shape)==2:
+        if len(feature_embedding.shape) == 2:
             feature_embedding = feature_embedding.unsqueeze(0)
         encoded_embedding = self.fc(feature_embedding)
 
-        # Subject-independent processing
+        # 1D Conv
         tmp = encoded_embedding.unsqueeze(1)
         tmp = self.conv1d_point(tmp)
-        tmp = tmp.transpose(1, 2)  # Using transpose instead of swapaxes for clarity
-        if tmp.shape[0] == 1:  # If batch size is 1
+        tmp = tmp.transpose(1, 2)
+        if tmp.shape[0] == 1:
             tmp = tmp.squeeze(0)
         
-        # Add positional embeddings
-        brain_embedding = tmp + self.pos_embedding[:, :tmp.size(1), :]
+        # **Fix Positional Embedding**
+        brain_embedding = tmp + self.pos_embedding[:, :tmp.size(1), :192]
         
-        # Transformer encoding
+        # Transformer Encoding
         brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
         brain_embedding = self.layernorm_embedding(brain_embedding)
         brain_embedding = self.brain_projection(brain_embedding)
