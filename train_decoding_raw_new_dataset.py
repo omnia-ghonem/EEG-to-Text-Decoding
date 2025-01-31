@@ -209,8 +209,7 @@ if __name__ == '__main__':
     os.makedirs(CHECKPOINT_DIR_LAST, exist_ok=True)
     dataset_setting = 'unique_sent'
     args = config.get_config('train_decoding')
-    step1_lr = 5e-5       # First step learning rate
-    step2_lr = 5e-5       # Second step learning rate
+
 
     num_epochs_step1 = args['num_epoch_step1']
     num_epochs_step2 = args['num_epoch_step2']
@@ -248,9 +247,9 @@ if __name__ == '__main__':
 
     
     if skip_step_one:
-        save_name = f'bci_skipstep1_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}'
+        save_name = f'{task_name}_finetune_{model_name}_skipstep1_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}_{dataset_setting}'
     else:
-        save_name = f'bci_2step_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}'
+        save_name = f'{task_name}_finetune_{model_name}_2steptraining_b{batch_size}_{num_epochs_step1}_{num_epochs_step2}_{step1_lr}_{step2_lr}_{dataset_setting}'
 
     if use_random_init:
         save_name = 'randinit_' + save_name
