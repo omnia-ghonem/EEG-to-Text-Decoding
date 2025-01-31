@@ -243,9 +243,9 @@ if __name__ == '__main__':
     tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
 
     # Set up datasets
-    train_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
-    dev_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
-    test_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
+    train_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
+    dev_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
+    test_set = data_raw_new_dataset.HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
 
     print(f'Train set size: {len(train_set)}')
     print(f'Dev set size: {len(dev_set)}')
@@ -264,7 +264,7 @@ if __name__ == '__main__':
 
     # Initialize model
     bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-    model = model_decoding_raw.BrainTranslator(
+    model = model_decoding_raw_new_dataset.BrainTranslator(
         bart, 
         in_feature=192,
         decoder_embedding_size=1024,
