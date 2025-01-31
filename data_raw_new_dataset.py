@@ -1,232 +1,139 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from scipy.io import loadmat
+import scipy.io
 import os
+from transformers import BartTokenizer
 from torch.nn.utils.rnn import pad_sequence
-from typing import List, Dict, Optional, Tuple
-import logging
-from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(levelname)s - %(message)s')
-
-def normalize_neural_data(neural_data):
-    """Normalize neural data using z-score normalization"""
-    mean = np.mean(neural_data, axis=0, keepdims=True)
-    std = np.std(neural_data, axis=0, keepdims=True) + 1e-8
-    return (neural_data - mean) / std
-
-def smooth_neural_data(neural_data, smooth_factor=4.0):
-    """Apply Gaussian smoothing to neural data"""
-    from scipy.ndimage import gaussian_filter1d
-    return gaussian_filter1d(neural_data, smooth_factor, axis=0)
-
-class HandwritingBCIDataset(Dataset):
-    def __init__(self, root_dir: str, phase: str, tokenizer, session_ids: Optional[List[str]] = None,
-                 max_seq_len: int = 800, min_seq_len: int = 5):
+class HandwritingBCI_Dataset(Dataset):
+    def __init__(self, data_dir="/kaggle/input/handwriting-bci", mode="sentences", 
+                 tokenizer=None, max_len=201, phase='train'):
         """
-        Initialize HandwritingBCI dataset.
-        
+        Dataset loader for Handwriting BCI dataset.
         Args:
-            root_dir: Path to dataset root directory
+            data_dir: Directory containing the .mat files
+            mode: "sentences" or "characters" 
+            tokenizer: BART tokenizer for text processing
+            max_len: Maximum sequence length
             phase: 'train', 'dev', or 'test'
-            tokenizer: Tokenizer for text processing
-            session_ids: List of session IDs to include
-            max_seq_len: Maximum sequence length (padded/truncated to this)
-            min_seq_len: Minimum sequence length to include
         """
-        self.root_dir = Path(root_dir)
-        self.phase = phase
-        self.tokenizer = tokenizer
-        self.max_seq_len = max_seq_len
-        self.min_seq_len = min_seq_len
+        self.session_ids = [
+            't5.2019.05.08', 't5.2019.11.25', 't5.2019.12.09',
+            't5.2019.12.11', 't5.2019.12.18', 't5.2019.12.20',
+            't5.2020.01.06', 't5.2020.01.08', 't5.2020.01.13',
+            't5.2020.01.15'
+        ]
         
-        # Default session IDs
-        if session_ids is None:
-            self.session_ids = [
-                't5.2019.05.08', 't5.2019.11.25', 't5.2019.12.09',
-                't5.2019.12.11', 't5.2019.12.18', 't5.2019.12.20',
-                't5.2020.01.06', 't5.2020.01.08', 't5.2020.01.13',
-                't5.2020.01.15'
-            ]
-        else:
-            self.session_ids = session_ids
-          
-        logging.info(f"Initializing {phase} dataset from {root_dir}")
-        logging.info(f"Using sessions: {self.session_ids}")
-        
-        # Input validation
-        if not self.root_dir.exists():
-            raise FileNotFoundError(f"Root directory does not exist: {self.root_dir}")
+        # Split sessions into train/dev/test
+        if phase == 'train':
+            self.session_ids = self.session_ids[:7]  # First 7 sessions for training
+        elif phase == 'dev':
+            self.session_ids = self.session_ids[7:9]  # 2 sessions for validation
+        else:  # test
+            self.session_ids = self.session_ids[9:]  # Last session for testing
             
-        dataset_dir = self.root_dir / 'Datasets'
-        if not dataset_dir.exists():
-            raise FileNotFoundError(f"Datasets directory not found at: {dataset_dir}")
-        
         self.inputs = []
-        self._load_all_sessions()
+        self.tokenizer = tokenizer if tokenizer else BartTokenizer.from_pretrained("facebook/bart-large")
+        self.max_len = max_len
         
-        if len(self.inputs) == 0:
-            raise ValueError(f"No valid samples found for {phase} set. Please check the data directory and session IDs.")
-            
-        logging.info(f"Loaded {len(self.inputs)} samples for {phase} set")
-
-    def _load_all_sessions(self):
-        """Load data from all specified sessions"""
-        for session_id in self.session_ids:
-            try:
-                self._load_session(session_id)
-                logging.info(f"Successfully loaded session: {session_id}")
-            except Exception as e:
-                logging.error(f"Error loading session {session_id}: {str(e)}")
-                continue  # Continue with next session even if one fails
-
-    def _load_session(self, session_id: str):
-        """Load data from a single session"""
-        try:
-            # Construct full session path
-            session_dir = self.root_dir / 'Datasets' / session_id
-            sentences_file = session_dir / 'sentences.mat'
-            
-            if not sentences_file.exists():
-                logging.warning(f"Sentences file not found at: {sentences_file}")
-                return
-            
-            # Load sentence data
-            sentence_data = loadmat(str(sentences_file))
-            logging.info(f"Loaded sentences.mat from {session_id}")
-            
-            # Get splits
-            total_sentences = len(sentence_data['sentencePrompt'])
-            train_split = int(0.8 * total_sentences)
-            dev_split = train_split + int(0.1 * total_sentences)
-            
-            logging.info(f"Session {session_id}: Total sentences = {total_sentences}")
-            
-            # Select appropriate slice based on phase
-            if self.phase == 'train':
-                start_idx, end_idx = 0, train_split
-            elif self.phase == 'dev':
-                start_idx, end_idx = train_split, dev_split
-            else:  # test
-                start_idx, end_idx = dev_split, total_sentences
-
-            processed_count = 0
-            excluded_count = 0
-            
-            # Process each sentence
-            for idx in range(start_idx, end_idx):
-                if 'excludedSentences' in sentence_data and sentence_data['excludedSentences'][idx][0]:
-                    excluded_count += 1
-                    continue
-                    
-                sample = self._process_sentence(sentence_data, idx)
-                if sample is not None:
-                    self.inputs.append(sample)
-                    processed_count += 1
+        # Load data from sessions
+        for session in self.session_ids:
+            file_path = os.path.join(data_dir, "Datasets", session, f"{mode}.mat")
+            if not os.path.exists(file_path):
+                continue
                 
-            logging.info(f"Session {session_id}: Processed {processed_count} samples, "
-                        f"excluded {excluded_count} samples")
+            data = scipy.io.loadmat(file_path)
+            
+            # Extract neural data and labels
+            if mode == "sentences":
+                neural_data = data["neuralActivityTimeSeries"]
+                labels = data["sentencePrompt"]
+            else:  # characters mode
+                neural_data = data["neuralActivityCube_A"]
+                labels = data["characterCues"]
+                
+            for i in range(len(labels)):
+                sample = self.get_input_sample(neural_data[i], labels[i])
+                if sample:
+                    self.inputs.append(sample)
                     
-        except Exception as e:
-            logging.error(f"Error processing session {session_id}: {str(e)}")
-            raise
+        print(f'[INFO] Loaded {len(self.inputs)} samples from {len(self.session_ids)} sessions for {phase}')
 
-    def _process_sentence(self, sentence_data: Dict, idx: int) -> Optional[Dict]:
-        """Process a single sentence and its neural data"""
-        try:
-            # Get sentence text
-            if 'intendedText' in sentence_data and sentence_data['intendedText'][idx][0].size > 0:
-                text = str(sentence_data['intendedText'][idx][0][0])
-            elif 'sentencePrompt' in sentence_data and sentence_data['sentencePrompt'][idx][0].size > 0:
-                text = str(sentence_data['sentencePrompt'][idx][0][0])
-            else:
-                logging.warning(f"No text found for index {idx}")
-                return None
+    def normalize_neural_data(self, neural_data):
+        """Normalize neural data using z-score normalization"""
+        mean = torch.mean(neural_data, dim=0)
+        std = torch.std(neural_data, dim=0)
+        return (neural_data - mean) / (std + 1e-8)
+
+    def get_input_sample(self, neural_activity, label):
+        """Process a single input sample
+        Args:
+            neural_activity: Raw neural activity data
+            label: Text label/prompt
+        Returns:
+            Dictionary containing processed inputs
+        """
+        input_sample = {}
+        
+        # Convert label to string if needed
+        if isinstance(label, np.ndarray):
+            label = str(label[0])
             
-            # Clean text
-            text = text.replace('>', ' ').replace('~', '.').replace('#', '').strip()
+        # Tokenize target text
+        target_tokenized = self.tokenizer(
+            label, 
+            padding='max_length',
+            max_length=self.max_len,
+            truncation=True,
+            return_tensors='pt',
+            return_attention_mask=True
+        )
+        
+        input_sample['target_ids'] = target_tokenized['input_ids'][0]
+        input_sample['target_mask'] = target_tokenized['attention_mask'][0]
+        
+        # Process neural data
+        neural_tensor = torch.tensor(neural_activity, dtype=torch.float32)
+        neural_tensor = self.normalize_neural_data(neural_tensor)
+        
+        # Pad or truncate to max_len
+        if neural_tensor.shape[0] < self.max_len:
+            padding = torch.zeros((self.max_len - neural_tensor.shape[0], neural_tensor.shape[1]))
+            neural_tensor = torch.cat((neural_tensor, padding), dim=0)
+        else:
+            neural_tensor = neural_tensor[:self.max_len, :]
             
-            # Get neural data and sequence length
-            neural_data = sentence_data['neuralActivityCube'][idx]
-            seq_len = sentence_data['numTimeBinsPerSentence'][idx][0]
-            if isinstance(seq_len, np.ndarray):
-                seq_len = int(seq_len[0])
-            
-            # Skip if sequence too short
-            if seq_len < self.min_seq_len:
-                logging.debug(f"Skipping sequence with length {seq_len} < {self.min_seq_len}")
-                return None
-            
-            # Preprocess neural data
-            neural_data = neural_data[:seq_len]
-            neural_data = normalize_neural_data(neural_data)
-            neural_data = smooth_neural_data(neural_data)
-            neural_data = torch.from_numpy(neural_data).float()
+        input_sample['input_embeddings'] = neural_tensor
+        input_sample['input_attn_mask'] = torch.ones(self.max_len)  # 1 indicates valid positions
+        input_sample['input_attn_mask_invert'] = torch.zeros(self.max_len)  # 0 indicates valid positions
+        input_sample['seq_len'] = torch.tensor(min(len(label), self.max_len))
+        input_sample['subject'] = 't5'  # Single subject dataset
+        
+        return input_sample
 
-            # Tokenize text
-            encoded = self.tokenizer(
-                text,
-                padding='max_length',
-                max_length=self.max_seq_len,
-                truncation=True,
-                return_tensors='pt',
-                return_attention_mask=True
-            )
-
-            # Create input sample
-            sample = {
-                'neural_data': neural_data,
-                'seq_len': seq_len,
-                'text': text,
-                'input_ids': encoded['input_ids'][0],
-                'attention_mask': encoded['attention_mask'][0],
-                'neural_mask': self._create_neural_mask(seq_len)
-            }
-
-            return sample
-
-        except Exception as e:
-            logging.warning(f"Failed to process sentence {idx}: {str(e)}")
-            return None
-
-    def _create_neural_mask(self, seq_len: int) -> torch.Tensor:
-        """Create attention mask for neural data"""
-        mask = torch.zeros(self.max_seq_len)
-        mask[:min(seq_len, self.max_seq_len)] = 1
-        return mask
-
-    def __len__(self) -> int:
+    def __len__(self):
         return len(self.inputs)
 
-    def __getitem__(self, idx: int) -> Dict:
-        """Get a sample from the dataset"""
-        sample = self.inputs[idx]
-        
-        # Pad or truncate neural data
-        neural_data = sample['neural_data']
-        if neural_data.shape[0] < self.max_seq_len:
-            padding = torch.zeros(self.max_seq_len - neural_data.shape[0], neural_data.shape[1])
-            neural_data = torch.cat([neural_data, padding], dim=0)
-        else:
-            neural_data = neural_data[:self.max_seq_len]
-            
-        return {
-            'neural_data': neural_data,
-            'input_ids': sample['input_ids'],
-            'attention_mask': sample['attention_mask'],
-            'neural_mask': sample['neural_mask'],
-            'seq_len': sample['seq_len'],
-            'text': sample['text']
-        }
-def collate_fn(batch: List[Dict]) -> Dict:
-    """Collate function for DataLoader"""
-    return {
-        'neural_data': torch.stack([x['neural_data'] for x in batch]),
-        'input_ids': torch.stack([x['input_ids'] for x in batch]),
-        'attention_mask': torch.stack([x['attention_mask'] for x in batch]), 
-        'neural_mask': torch.stack([x['neural_mask'] for x in batch]),
-        'seq_len': torch.tensor([x['seq_len'] for x in batch]),
-        'text': [x['text'] for x in batch]
-    }
+    def __getitem__(self, idx):
+        input_sample = self.inputs[idx]
+        return (
+            input_sample['input_embeddings'],
+            input_sample['seq_len'],
+            input_sample['input_attn_mask'],
+            input_sample['input_attn_mask_invert'], 
+            input_sample['target_ids'],
+            input_sample['target_mask'],
+            input_sample['subject']
+        )
+
+if __name__ == '__main__':
+    # Test dataset loading
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
+    train_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='train')
+    dev_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='dev')
+    test_set = HandwritingBCI_Dataset(mode="sentences", tokenizer=tokenizer, phase='test')
+    
+    print(f'Train set size: {len(train_set)}')
+    print(f'Dev set size: {len(dev_set)}')
+    print(f'Test set size: {len(test_set)}')
