@@ -1,16 +1,7 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.data
-import torch
-from torch.nn.utils.rnn import pack_padded_sequence
-
-def cross_entropy(preds, targets, reduction='none'):
-    log_softmax = nn.LogSoftmax(dim=-1)
-    loss = (-targets * log_softmax(preds)).sum(1)
-    if reduction == "none":
-        return loss
-    elif reduction == "mean":
-        return loss.mean()
+from torch.nn.utils.rnn import pack_padded_sequence, pad_sequence
 
 class ProjectionHead(nn.Module):
     def __init__(
@@ -33,6 +24,78 @@ class ProjectionHead(nn.Module):
         x = self.dropout(x)
         x = x + projected
         return self.layer_norm(x)
+
+class FeatureEmbedded(nn.Module):
+    def __init__(self, input_dim=192, hidden_dim=512, num_layers=2, is_bidirectional=True):
+        super(FeatureEmbedded, self).__init__()
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.is_bidirectional = is_bidirectional
+        
+        self.lstm = nn.GRU(
+            input_size=self.input_dim, 
+            hidden_size=self.hidden_dim, 
+            num_layers=self.num_layers, 
+            batch_first=True, 
+            dropout=0.2,
+            bidirectional=self.is_bidirectional
+        )
+        
+        # Initialize parameters
+        for name, param in self.lstm.named_parameters():
+            if 'bias' in name:
+                nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                nn.init.orthogonal_(param)
+                
+    def forward(self, x, lengths, device):
+        batch_embeddings = []
+        
+        # Convert length to a list if it's a single value
+        if not isinstance(lengths, (list, tuple)) and len(lengths.shape) == 0:
+            lengths = [lengths.item()]
+        elif not isinstance(lengths, (list, tuple)):
+            lengths = lengths.cpu().tolist()
+        
+        for x_sentence, length_sentence in zip(x, lengths):
+            # Handle single sample
+            if len(x_sentence.shape) == 2:
+                x_sentence = x_sentence.unsqueeze(0)
+                
+            # Ensure length is a tensor
+            length_tensor = torch.tensor([length_sentence], dtype=torch.int64)
+            
+            # Pack sequence
+            packed_input = pack_padded_sequence(
+                x_sentence, 
+                length_tensor,
+                batch_first=True, 
+                enforce_sorted=False
+            )
+            
+            # Process through GRU
+            lstm_out, _ = self.lstm(packed_input)
+            # Unpack sequence
+            lstm_out, _ = nn.utils.rnn.pad_packed_sequence(lstm_out)
+            
+            # Get final hidden states
+            if self.is_bidirectional:
+                sentence_embedding = lstm_out[-1]
+            else:
+                idx = (length_tensor - 1).view(-1, 1).expand(
+                    length_tensor.size(0), 
+                    self.hidden_dim
+                )
+                sentence_embedding = lstm_out.gather(0, idx.unsqueeze(0)).squeeze()
+            
+            batch_embeddings.append(sentence_embedding)
+        
+        # Stack all embeddings
+        return torch.stack(batch_embeddings, 0).to(device)
 
 class BrainTranslator(nn.Module):
     def __init__(self, bart, in_feature=192, decoder_embedding_size=1024, additional_encoder_nhead=8, additional_encoder_dim_feedforward=2048):
@@ -76,9 +139,13 @@ class BrainTranslator(nn.Module):
             if ('bart' in name):
                 param.requires_grad = True
 
-    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch, lenghts_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device):
+    def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch, lengths_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device):
+        # Ensure lengths_batch is proper format
+        if len(lengths_batch.shape) == 0:
+            lengths_batch = lengths_batch.unsqueeze(0)
+            
         # Feature embedding
-        feature_embedding = self.feature_embedded(input_embeddings_batch, lenghts_batch, device)
+        feature_embedding = self.feature_embedded(input_embeddings_batch, lengths_batch, device)
         if len(feature_embedding.shape)==2:
             feature_embedding = torch.unsqueeze(feature_embedding,0)
         encoded_embedding = self.fc(feature_embedding)
@@ -110,66 +177,3 @@ class BrainTranslator(nn.Module):
                 return_dict=True
             )
             return out.logits
-
-class FeatureEmbedded(nn.Module):
-    def __init__(self, input_dim=192, hidden_dim=512, num_layers=2, is_bidirectional=True):
-        super(FeatureEmbedded, self).__init__()
-
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        self.is_bidirectional = is_bidirectional
-        
-        self.lstm = nn.GRU(
-            input_size=self.input_dim, 
-            hidden_size=self.hidden_dim, 
-            num_layers=self.num_layers, 
-            batch_first=True, 
-            dropout=0.2,
-            bidirectional=self.is_bidirectional
-        )
-        
-        # Initialize parameters
-        for name, param in self.lstm.named_parameters():
-            if 'bias' in name:
-                nn.init.constant_(param, 0.0)
-            elif 'weight_ih' in name:
-                nn.init.kaiming_normal_(param)
-            elif 'weight_hh' in name:
-                nn.init.orthogonal_(param)
-                
-    def forward(self, x, lengths, device):
-        batch_embeddings = []
-        
-        for x_sentence, length_sentence in zip(x, lengths):
-            # Handle single sample
-            if len(x_sentence.shape) == 2:
-                x_sentence = x_sentence.unsqueeze(0)
-            
-            # Pack sequence
-            packed_input = pack_padded_sequence(
-                x_sentence, 
-                length_sentence.cpu().numpy(), 
-                batch_first=True, 
-                enforce_sorted=False
-            )
-            
-            # Process through GRU
-            lstm_out, _ = self.lstm(packed_input)
-            # Unpack sequence
-            lstm_out, _ = nn.utils.rnn.pad_packed_sequence(lstm_out)
-            
-            # Get final hidden states
-            if self.is_bidirectional:
-                sentence_embedding = lstm_out[-1]
-            else:
-                idx = (length_sentence - 1).view(-1, 1).expand(
-                    length_sentence.size(0), 
-                    self.hidden_dim
-                )
-                sentence_embedding = lstm_out.gather(0, idx.unsqueeze(0)).squeeze()
-            
-            batch_embeddings.append(sentence_embedding)
-        
-        # Stack all embeddings
-        return torch.stack(batch_embeddings, 0).to(device)
