@@ -244,8 +244,7 @@ if __name__ == '__main__':
         dev = "cpu"
     device = torch.device(dev)
     print(f'[INFO]using device {dev}')
-    with open(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as out_config:
-        json.dump(args, out_config, indent=4)
+
 
     
     if skip_step_one:
@@ -259,6 +258,9 @@ if __name__ == '__main__':
     output_checkpoint_name_best = os.path.join(CHECKPOINT_DIR_BEST, f'{save_name}.pt')
     output_checkpoint_name_last = os.path.join(CHECKPOINT_DIR_LAST, f'{save_name}.pt')
 
+
+    with open(f'/kaggle/working/config/decoding_raw/{save_name}.json', 'w') as out_config:
+        json.dump(args, out_config, indent=4)
     # Set random seeds
     torch.manual_seed(42)
     np.random.seed(42)
