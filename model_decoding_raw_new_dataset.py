@@ -71,7 +71,17 @@ class BrainTranslator(nn.Module):
         self.brain_projection = nn.Linear(in_feature, 1024)  # FIXED: Projection to correct dim
         
         self.bart = bart
-        
+    def freeze_pretrained_bart(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = True
+            if ('bart' in name):
+                param.requires_grad = False
+
+    def freeze_pretrained_brain(self):
+        for name, param in self.named_parameters():
+            param.requires_grad = False
+            if ('bart' in name):
+                param.requires_grad = True
     def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch, lengths_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device):
         if len(lengths_batch.shape) == 0:
             lengths_batch = lengths_batch.unsqueeze(0)
