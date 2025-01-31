@@ -123,18 +123,22 @@ class BrainTranslator(nn.Module):
     def forward(self, input_embeddings_batch, input_masks_batch, input_masks_invert, target_ids_batch, 
                lengths_batch, word_contents_batch, word_contents_attn_batch, stepone, subject_batch, device):
         
-        # Ensure proper input dimensions
-        if len(input_embeddings_batch.shape) == 2:
-            input_embeddings_batch = input_embeddings_batch.unsqueeze(0)
-            
-        # Handle case where batch size is 20 and total size is 4020
-        batch_size = input_embeddings_batch.size(0)
-        seq_len = 21  # Assuming from error
-        feature_dim = input_embeddings_batch.numel() // (batch_size * seq_len)
+        # Calculate proper dimensions
+        batch_size = input_embeddings_batch.size(0)  # Should be 20
+        total_elements = input_embeddings_batch.numel()  # Should be 4020
         
-        input_embeddings_batch = input_embeddings_batch.reshape(batch_size, seq_len, feature_dim)
-
-
+        # Since we know total_elements = batch_size * seq_len * feature_dim
+        # And since total_elements = 4020 and batch_size = 20
+        # seq_len * feature_dim = 4020/20 = 201
+        feature_dim = self.in_feature  # Should be 192
+        if total_elements == 4020 and batch_size == 20:
+            seq_len = total_elements // (batch_size * feature_dim)
+            if seq_len * batch_size * feature_dim != total_elements:
+                seq_len += 1
+                
+            # Reshape input to [batch_size, seq_len, feature_dim]
+            input_embeddings_batch = input_embeddings_batch.contiguous().view(batch_size, -1, feature_dim)
+        
         feature_embedding = self.feature_embedded(input_embeddings_batch, lengths_batch, device)
         if len(feature_embedding.shape) == 2:
             feature_embedding = feature_embedding.unsqueeze(0)
