@@ -129,13 +129,12 @@ class BrainTranslator(nn.Module):
             
         # Handle case where batch size is 20 and total size is 4020
         batch_size = input_embeddings_batch.size(0)
+        seq_len = 21  # Assuming from error
+        feature_dim = input_embeddings_batch.numel() // (batch_size * seq_len)
         
-        # Calculate correct sequence length (4020 / (20 * 192) = 1.046875, so actual sequence length should be 21)
-        seq_len = input_embeddings_batch.size(1)
-        if input_embeddings_batch.numel() == 4020:  # Specific case handling
-            seq_len = 21
-            input_embeddings_batch = input_embeddings_batch.reshape(batch_size, seq_len, -1)
-        
+        input_embeddings_batch = input_embeddings_batch.reshape(batch_size, seq_len, feature_dim)
+
+
         feature_embedding = self.feature_embedded(input_embeddings_batch, lengths_batch, device)
         if len(feature_embedding.shape) == 2:
             feature_embedding = feature_embedding.unsqueeze(0)
