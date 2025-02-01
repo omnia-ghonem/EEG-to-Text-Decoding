@@ -54,7 +54,7 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=12)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=8)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-5)
 
         # Changed projection dimension to match deepseek's embedding size (768)
