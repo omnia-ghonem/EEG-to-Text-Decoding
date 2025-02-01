@@ -16,15 +16,15 @@ from transformers import GPT2Tokenizer, GPT2LMHeadModel
 from transformers import BartTokenizer, BartForConditionalGeneration, BertTokenizer, BertConfig, BertForSequenceClassification, RobertaTokenizer, RobertaForSequenceClassification
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import sys
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_gpt2.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_gpt2.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw_deepseek.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_deepseek.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 for path in sys.path:
     print(path)
 
-import data_raw_gpt2
+import data_raw_deepseek
 import config
-import model_decoding_raw_gpt2
+import model_decoding_raw_deepseek
 from torch.nn.utils.rnn import pad_sequence
 
 from nltk.translate.bleu_score import corpus_bleu
@@ -342,13 +342,13 @@ if __name__ == '__main__':
     if model_name in ['BrainTranslator', 'BrainTranslatorNaive']:
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-6.7b-instruct", trust_remote_code=True)
     # train dataset
-    train_set = data_raw_gpt2.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
+    train_set = data_raw_deepseek.ZuCo_dataset(whole_dataset_dicts, 'train', tokenizer, subject=subject_choice,
                              eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
     # dev dataset
-    dev_set = data_raw_gpt2.ZuCo_dataset(whole_dataset_dicts, 'dev', tokenizer, subject=subject_choice,
+    dev_set = data_raw_deepseek.ZuCo_dataset(whole_dataset_dicts, 'dev', tokenizer, subject=subject_choice,
                            eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
     # test dataset
-    test_set = data_raw_gpt2.ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer, subject=subject_choice,
+    test_set = data_raw_deepseek.ZuCo_dataset(whole_dataset_dicts, 'test', tokenizer, subject=subject_choice,
                             eeg_type=eeg_type_choice, bands=bands_choice, setting=dataset_setting, raweeg=True)
 
     dataset_sizes = {'train': len(train_set), 'dev': len(
@@ -396,7 +396,7 @@ if __name__ == '__main__':
     ''' set up model '''
     if model_name == 'BrainTranslator':
         pretrained =AutoModelForCausalLM.from_pretrained("deepseek-ai/deepseek-coder-6.7b-base", trust_remote_code=True, torch_dtype=torch.bfloat16)
-        model = model_decoding_raw_gpt2.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
+        model = model_decoding_raw_deepseek.BrainTranslator(pretrained, in_feature=1024, decoder_embedding_size=1024,
                                 additional_encoder_nhead=8, additional_encoder_dim_feedforward=4096)
 
 
