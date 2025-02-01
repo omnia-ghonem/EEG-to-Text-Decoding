@@ -3,6 +3,7 @@ import torch
 import pickle
 from torch.utils.data import Dataset
 import json
+from transformers import GPT2Tokenizer
 from torch.nn.utils.rnn import pad_sequence
 
 ZUCO_SENTIMENT_LABELS = json.load(open('/kaggle/input/dataset/ZuCo/task1-SR/sentiment_labels/sentiment_labels.json'))
