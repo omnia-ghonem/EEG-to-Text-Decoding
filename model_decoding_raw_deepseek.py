@@ -26,7 +26,7 @@ class ProjectionHead(nn.Module):
         return x
 
 class BrainTranslator(nn.Module):
-    def __init__(self, deepseek, in_feature=840, decoder_embedding_size=4096, additional_encoder_nhead=6, additional_encoder_dim_feedforward=2048):
+    def __init__(self, deepseek, in_feature=840, decoder_embedding_size=4096, additional_encoder_nhead=5, additional_encoder_dim_feedforward=2048):
         super(BrainTranslator, self).__init__()
         
         # Embedded EEG raw features
@@ -54,7 +54,7 @@ class BrainTranslator(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers= 5)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers= 4)
         self.layernorm_embedding = nn.LayerNorm(in_feature, eps=1e-5)
 
         # Changed projection dimension to match deepseek's embedding size (768)
