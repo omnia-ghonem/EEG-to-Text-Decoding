@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torch.utils.data
 from torch.nn.utils.rnn import pack_padded_sequence
 from transformers import AutoTokenizer, AutoModelForCausalLM
+
 class ProjectionHead(nn.Module):
     def __init__(
         self,
@@ -104,7 +105,8 @@ class BrainTranslator(nn.Module):
         brain_embedding = self.brain_projection(brain_embedding)
 
         if stepone:
-            words_embedding = self.deepseek.transformer.wte(word_contents_batch)
+            # Get the embedding layer from DeepSeek model
+            words_embedding = self.deepseek.model.embed_tokens(word_contents_batch)
             loss = nn.MSELoss()
             return loss(brain_embedding, words_embedding)
         else:
