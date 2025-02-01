@@ -104,12 +104,20 @@ class BrainTranslator(nn.Module):
         # Project to deepseek's embedding dimension (768)
         brain_embedding = self.brain_projection(brain_embedding)
 
+
         if stepone:
-            # Get the embedding layer from DeepSeek model
-            words_embedding = self.deepseek.model.embed_tokens(word_contents_batch)
+            # Get the embedding layer from DeepSeek model and convert to float32
+            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+                words_embedding = self.deepseek.model.embed_tokens(word_contents_batch)
+            words_embedding = words_embedding.to(torch.float32)
+            
+            # Convert brain embedding to float32 for loss computation
+            brain_embedding = brain_embedding.to(torch.float32)
             loss = nn.MSELoss()
             return loss(brain_embedding, words_embedding)
         else:
+            # Convert brain embedding to bfloat16 for DeepSeek forward pass
+            brain_embedding = brain_embedding.to(torch.bfloat16)
             out = self.deepseek(
                 inputs_embeds=brain_embedding,
                 attention_mask=input_masks_batch,
@@ -119,8 +127,7 @@ class BrainTranslator(nn.Module):
             if features:
                 return out.logits, brain_embedding
             return out.logits
-
-
+            
 class FeatureEmbedded(nn.Module):
     def __init__(self, input_dim=105, hidden_dim=512, num_layers=2, is_bidirectional=True):
         super(FeatureEmbedded, self).__init__()
