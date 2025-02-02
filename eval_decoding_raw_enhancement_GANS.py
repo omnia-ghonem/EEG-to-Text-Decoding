@@ -55,8 +55,19 @@ def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_resu
     pred_string_list = []
     refine_tokens_list = []
     refine_string_list = []
+    
+    # Buffer for collecting results before writing
+    results_buffer = []
+    BUFFER_SIZE = 10  # Number of results to collect before writing to file
+    
+    def write_buffer_to_file(buffer, f):
+        if buffer:
+            f.write(''.join(buffer))
+            f.flush()  # Explicitly flush after writing
+            return []  # Return empty buffer
+        return buffer
 
-    with open(output_all_results_path, 'w') as f:
+    with open(output_all_results_path, 'w', buffering=1) as f:  # Use line buffering
         for _, seq_len, input_masks, input_mask_invert, target_ids, target_mask, sentiment_labels, sent_level_EEG, input_raw_embeddings, input_raw_embeddings_lengths, word_contents, word_contents_attn, subject_batch in dataloaders['test']:
             # Load batch data
             input_embeddings_batch = input_raw_embeddings.to(device).float()
@@ -72,9 +83,10 @@ def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_resu
             target_tokens = tokenizer.convert_ids_to_tokens(target_ids_batch[0].tolist(), skip_special_tokens=True)
             target_string = tokenizer.decode(target_ids_batch[0], skip_special_tokens=True)
 
-            f.write(f'target string: {target_string}\n')
+            # Collect results in buffer
+            results_buffer.append(f'target string: {target_string}\n')
             target_tokens_string = "[" + " ".join(str(el) for el in target_tokens) + "]"
-            f.write(f'target tokens: {target_tokens_string}\n')
+            results_buffer.append(f'target tokens: {target_tokens_string}\n')
 
             # Add to list for later BLEU metric calculation
             target_tokens_list.append([target_tokens])
@@ -98,7 +110,7 @@ def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_resu
             values, predictions = probs.topk(1)
             predictions = torch.squeeze(predictions)
             predicted_string = tokenizer.decode(predictions).split('</s></s>')[0].replace('<s>', '')
-            f.write(f'predicted string: {predicted_string}\n')
+            results_buffer.append(f'predicted string: {predicted_string}\n')
             
             # Convert to int list and truncate at EOS
             predictions = predictions.tolist()
@@ -114,19 +126,29 @@ def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_resu
 
             # Deepseek refinement
             predicted_string_refined = deepseek_refinement(predicted_string, device).replace('\n', '')
-            f.write(f'refined string: {predicted_string_refined}\n')
+            results_buffer.append(f'refined string: {predicted_string_refined}\n')
             refine_tokens_list.append(tokenizer.convert_ids_to_tokens(
                 tokenizer(predicted_string_refined)['input_ids'], skip_special_tokens=True))
             refine_string_list.append(predicted_string_refined)
 
             pred_tokens_string = "[" + " ".join(str(el) for el in pred_tokens) + "]"
-            f.write(f'predicted tokens (truncated): {pred_tokens_string}\n')
-            f.write(f'################################################\n\n\n')
+            results_buffer.append(f'predicted tokens (truncated): {pred_tokens_string}\n')
+            results_buffer.append(f'################################################\n\n\n')
+            
+            # Write buffer to file when it reaches the threshold
+            if len(results_buffer) >= BUFFER_SIZE:
+                results_buffer = write_buffer_to_file(results_buffer, f)
 
             sample_count += 1
             running_loss += loss.item() * input_embeddings_batch.size()[0]
+            
+            # Print progress to show the script is still running
+            if sample_count % 5 == 0:
+                print(f'Processed {sample_count} samples...')
 
     epoch_loss = running_loss / dataset_sizes['test_set']
+    # Write any remaining results in buffer
+    write_buffer_to_file(results_buffer, f)
     print('test loss: {:4f}'.format(epoch_loss))
 
     print("\nPredicted outputs")
