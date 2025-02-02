@@ -38,7 +38,7 @@ def deepseek_refinement(corrupted_text, model, tokenizer):
         
     return result
 
-def eval_model(dataloaders, device, tokenizer, criterion, model, output_all_results_path='/kaggle/working/results_raw/temp.txt'):
+def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234', output_all_results_path = '/kaggle/working/results_raw/temp.txt' ):
     # Initialize DeepSeek model
     deepseek_name = "deepseek-ai/DeepSeek-V2-Chat"
     deepseek_tokenizer = AutoTokenizer.from_pretrained(deepseek_name, trust_remote_code=True)
