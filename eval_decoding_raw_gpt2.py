@@ -6,8 +6,8 @@ from torch.utils.data import DataLoader
 import pickle
 import json
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
-from data_raw import ZuCo_dataset
-from model_decoding_raw import BrainTranslator
+from data_raw_gpt2 import ZuCo_dataset
+from model_decoding_raw_gpt2 import BrainTranslator
 from nltk.translate.bleu_score import corpus_bleu
 from rouge import Rouge
 from config import get_config
