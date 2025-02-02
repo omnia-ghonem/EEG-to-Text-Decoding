@@ -26,7 +26,7 @@ class ProjectionHead(nn.Module):
         return x
 
 class BrainTranslator(nn.Module):
-    def __init__(self, deepseek, in_feature=840, decoder_embedding_size=4096, additional_encoder_nhead=5, additional_encoder_dim_feedforward=2048):
+    def __init__(self, deepseek, in_feature=840, decoder_embedding_size=4096, additional_encoder_nhead=3, additional_encoder_dim_feedforward=2048):
         super(BrainTranslator, self).__init__()
         
         # Embedded EEG raw features
