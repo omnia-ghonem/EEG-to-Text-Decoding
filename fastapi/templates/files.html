@@ -26,9 +26,9 @@
                 <div class="file-item">
                     <span class="file-name">{{ file }}</span>
                     <div class="file-actions">
-                        <form action="/submit" method="post" style="display: inline;">
+                        <form action="/process_file" method="post" style="display: inline;">
                             <input type="hidden" name="filename" value="{{ file }}">
-                            <button type="submit" class="action-btn process-btn">Process</button>
+                            <button type="submit" class="action-btn process-btn">Predict</button>
                         </form>
                         <form action="/delete_file" method="post" style="display: inline;">
                             <input type="hidden" name="filename" value="{{ file }}">
