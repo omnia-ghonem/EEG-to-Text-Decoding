@@ -356,7 +356,81 @@ section a {
     transform: scale(1.05);
     text-decoration: none;
 }
+.files-container {
+    margin: 20px 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
 
+.file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fff;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.file-name {
+    font-size: 14px;
+    color: #333;
+}
+
+.file-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.action-btn {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+}
+
+.process-btn {
+    background: #4CAF50;
+    color: white;
+}
+
+.delete-btn {
+    background: #f44336;
+    color: white;
+}
+
+.action-btn:hover {
+    opacity: 0.8;
+}
+
+.no-files {
+    text-align: center;
+    color: #666;
+    padding: 20px;
+}
+
+.navigation-buttons {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.back-btn {
+    padding: 8px 16px;
+    background: #222;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 15px;
+    transition: all 0.3s ease;
+}
+
+.back-btn:hover {
+    background: #000;
+    transform: scale(1.05);
+}
     </style>
 </head>
 <body>
