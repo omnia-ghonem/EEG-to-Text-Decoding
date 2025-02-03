@@ -42,7 +42,7 @@ def eval_model(dataloaders, device, tokenizer, criterion, model,api_key = '1234'
     refined_output_path='/kaggle/working/results_raw/refined_strings.txt'):
     # modified from: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
 
-    gpt=True
+    gpt=False
 
     print("Saving predicted strings to:", predicted_output_path)
     print("Saving refined strings to:", refined_output_path)
