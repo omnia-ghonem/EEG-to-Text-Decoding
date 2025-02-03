@@ -15,26 +15,44 @@
         <header>My Files</header>
     </div>
 
-    <div class="files-container">
-        {% if files %}
-            {% for file in files %}
-            <div class="file-item">
-                <span class="file-name">{{ file }}</span>
-                <div class="file-actions">
-                    <form action="/process_file" method="post" style="display: inline;">
-                        <input type="hidden" name="filename" value="{{ file }}">
-                        <button type="submit" class="action-btn process-btn">Process</button>
-                    </form>
-                    <form action="/delete_file" method="post" style="display: inline;">
-                        <input type="hidden" name="filename" value="{{ file }}">
-                        <button type="submit" class="action-btn delete-btn">Delete</button>
-                    </form>
-                </div>
+    <!-- Upload Form Section -->
+    <div class="upload-section">
+        <h3>Upload New File</h3>
+        <form id="upload-form" class="upload-form" action="/submit" method="post" enctype="multipart/form-data">
+            <div class="file-input-group">
+                <label for="file">Select a pickle file:</label>
+                <input type="file" id="file" name="file" accept=".pkl,.pickle" required>
             </div>
-            {% endfor %}
-        {% else %}
-            <p class="no-files">No files uploaded yet.</p>
-        {% endif %}
+            <div class="input-submit">
+                <button type="submit" class="submit-btn">Upload</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Files List Section -->
+    <div class="files-section">
+        <h3>Existing Files</h3>
+        <div class="files-container">
+            {% if files %}
+                {% for file in files %}
+                <div class="file-item">
+                    <span class="file-name">{{ file }}</span>
+                    <div class="file-actions">
+                        <form action="/process_file" method="post" style="display: inline;">
+                            <input type="hidden" name="filename" value="{{ file }}">
+                            <button type="submit" class="action-btn process-btn">Process</button>
+                        </form>
+                        <form action="/delete_file" method="post" style="display: inline;">
+                            <input type="hidden" name="filename" value="{{ file }}">
+                            <button type="submit" class="action-btn delete-btn">Delete</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="no-files">No files uploaded yet.</p>
+            {% endif %}
+        </div>
     </div>
 
     <div class="navigation-buttons">
@@ -42,4 +60,22 @@
     </div>
 </div>
 
+
+
+<div id="loading">
+    <div class="spinner"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form');
+    const loading = document.getElementById('loading');
+
+    forms.forEach(form => {
+        form.addEventListener('submit', function() {
+            loading.style.display = 'flex';
+        });
+    });
+});
+</script>
 {% endblock %}
