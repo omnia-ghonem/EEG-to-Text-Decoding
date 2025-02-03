@@ -15,19 +15,7 @@
         <header>My Files</header>
     </div>
 
-    <!-- Upload Form Section -->
-    <div class="upload-section">
-        <h3>Upload New File</h3>
-        <form id="upload-form" class="upload-form" action="/submit" method="post" enctype="multipart/form-data">
-            <div class="file-input-group">
-                <label for="file">Select a pickle file:</label>
-                <input type="file" id="file" name="file" accept=".pkl,.pickle" required>
-            </div>
-            <div class="input-submit">
-                <button type="submit" class="submit-btn">Upload</button>
-            </div>
-        </form>
-    </div>
+
 
     <!-- Files List Section -->
     <div class="files-section">
@@ -54,7 +42,19 @@
             {% endif %}
         </div>
     </div>
-
+    <!-- Upload Form Section -->
+    <div class="upload-section">
+        <h3>Upload New File</h3>
+        <form id="upload-form" class="upload-form" action="/submit" method="post" enctype="multipart/form-data">
+            <div class="file-input-group">
+                <label for="file">Select a pickle file:</label>
+                <input type="file" id="file" name="file" accept=".pkl,.pickle" required>
+            </div>
+            <div class="input-submit">
+                <button type="submit" class="submit-btn">Upload</button>
+            </div>
+        </form>
+    </div>
     <div class="navigation-buttons">
         <a href="/index" class="back-btn">Go Back</a>
     </div>
