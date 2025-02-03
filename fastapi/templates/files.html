@@ -26,7 +26,7 @@
                 <div class="file-item">
                     <span class="file-name">{{ file }}</span>
                     <div class="file-actions">
-                        <form action="/process_file" method="post" style="display: inline;">
+                        <form action="/submit" method="post" style="display: inline;">
                             <input type="hidden" name="filename" value="{{ file }}">
                             <button type="submit" class="action-btn process-btn">Process</button>
                         </form>
@@ -45,7 +45,7 @@
     <!-- Upload Form Section -->
     <div class="upload-section">
         <h3>Upload New File</h3>
-        <form id="upload-form" class="upload-form" action="/submit" method="post" enctype="multipart/form-data">
+        <form id="upload-form" class="upload-form" action="/upload" method="post" enctype="multipart/form-data">
             <div class="file-input-group">
                 <label for="file">Select a pickle file:</label>
                 <input type="file" id="file" name="file" accept=".pkl,.pickle" required>
