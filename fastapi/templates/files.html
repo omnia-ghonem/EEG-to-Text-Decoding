@@ -15,8 +15,6 @@
         <header>My Files</header>
     </div>
 
-
-
     <!-- Files List Section -->
     <div class="files-section">
         <h3>Existing Files</h3>
@@ -26,7 +24,7 @@
                 <div class="file-item">
                     <span class="file-name">{{ file }}</span>
                     <div class="file-actions">
-                        <form action="/process_file" method="post" style="display: inline;">
+                        <form action="/process_file" method="post" style="display: inline;" enctype="multipart/form-data">
                             <input type="hidden" name="filename" value="{{ file }}">
                             <button type="submit" class="action-btn process-btn">Predict</button>
                         </form>
@@ -42,6 +40,7 @@
             {% endif %}
         </div>
     </div>
+
     <!-- Upload Form Section -->
     <div class="upload-section">
         <h3>Upload New File</h3>
@@ -55,12 +54,11 @@
             </div>
         </form>
     </div>
+
     <div class="navigation-buttons">
         <a href="/index" class="back-btn">Go Back</a>
     </div>
 </div>
-
-
 
 <div id="loading">
     <div class="spinner"></div>
