@@ -7,6 +7,10 @@
 </div>
 
 <div class="login-box">
+    <div class="logo">
+        <img src="static/icons/ejust_logo.png" alt="Logo" class="logo-img">
+    </div>
+    
     <h2>Upload a Pickle File</h2>
     <form id="submit-form" class="upload-form" action="/submit" method="post" enctype="multipart/form-data">
         <div class="file-input-group">
@@ -17,5 +21,10 @@
             <button type="submit" class="submit-btn">Submit</button>
         </div>
     </form>
+    
+    <div class="files-button-container">
+        <a href="/files" class="files-btn">View My Files</a>
+    </div>
 </div>
+
 {% endblock %}
