@@ -66,17 +66,14 @@ class HandwritingBCI_Dataset(Dataset):
         print(f'[INFO] Loaded {len(self.inputs)} samples from {len(self.session_ids)} sessions for {phase}')
 
     def normalize_neural_data(self, neural_data):
-        """Normalize the neural data using z-score normalization."""
         mean = np.mean(neural_data, axis=0, keepdims=True)
         std = np.std(neural_data, axis=0, keepdims=True)
         return (neural_data - mean) / (std + 1e-8)
 
     def get_input_sample(self, neural_activity, text):
-        """Process a single input sample."""
         try:
             input_sample = {}
             
-            # Process text data
             if isinstance(text, bytes):
                 text = text.decode('utf-8')
             elif not isinstance(text, str):
@@ -86,7 +83,6 @@ class HandwritingBCI_Dataset(Dataset):
             if not text:
                 return None
                 
-            # Tokenize text
             target_tokenized = self.tokenizer(
                 text, 
                 padding='max_length',
@@ -99,25 +95,17 @@ class HandwritingBCI_Dataset(Dataset):
             input_sample['target_ids'] = target_tokenized['input_ids'][0]
             input_sample['target_mask'] = target_tokenized['attention_mask'][0]
             
-            # Process neural data
             if isinstance(neural_activity, np.ndarray):
-                # Normalize neural data
-                neural_activity = self.normalize_neural_data(neural_activity)
+                neural_neural_activity = self.normalize_neural_data(neural_activity)
                 neural_tensor = torch.tensor(neural_activity, dtype=torch.float32)
                 
-                # Ensure proper shape
                 if len(neural_tensor.shape) == 1:
                     neural_tensor = neural_tensor.unsqueeze(1)
                 elif len(neural_tensor.shape) > 2:
                     neural_tensor = neural_tensor.reshape(-1, neural_tensor.shape[-1])
                 
-                # Verify the feature dimension
-                if neural_tensor.shape[1] != 192:  # Expected feature dimension
-                    raise ValueError(f"Unexpected feature dimension: {neural_tensor.shape[1]}, expected 192")
-                
                 seq_len = neural_tensor.shape[0]
                 
-                # Handle padding/truncation
                 if neural_tensor.shape[0] < self.max_len:
                     padding = torch.zeros((self.max_len - neural_tensor.shape[0], neural_tensor.shape[1]))
                     neural_tensor = torch.cat((neural_tensor, padding), dim=0)
@@ -125,7 +113,6 @@ class HandwritingBCI_Dataset(Dataset):
                     neural_tensor = neural_tensor[:self.max_len, :]
                     seq_len = self.max_len
                 
-                # Store processed tensors
                 input_sample['input_embeddings'] = neural_tensor
                 input_sample['input_attn_mask'] = torch.ones(self.max_len)
                 input_sample['input_attn_mask_invert'] = torch.zeros(self.max_len)
@@ -142,11 +129,9 @@ class HandwritingBCI_Dataset(Dataset):
             return None
 
     def __len__(self):
-        """Return the total number of samples."""
         return len(self.inputs)
 
     def __getitem__(self, idx):
-        """Get a single sample from the dataset."""
         input_sample = self.inputs[idx]
         return (
             input_sample['input_embeddings'],
