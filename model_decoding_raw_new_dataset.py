@@ -154,21 +154,22 @@ class BrainTranslator(nn.Module):
         # Process input embeddings
         batch_size = input_embeddings_batch.size(0)
         
-        # Ensure the input is properly shaped
+        # Calculate proper sequence length and feature dimension
         if input_embeddings_batch.dim() == 2:
-            # If input is [batch_size, features*seq_len], reshape it
-            seq_len = lengths_batch[0] if isinstance(lengths_batch, list) else lengths_batch.item()
-            input_embeddings_batch = input_embeddings_batch.view(batch_size, seq_len, -1)
+            # For 2D input, calculate proper dimensions
+            total_size = input_embeddings_batch.size(1)
+            feature_dim = self.in_feature
+            seq_len = total_size // feature_dim
+            input_embeddings_batch = input_embeddings_batch.view(batch_size, seq_len, feature_dim)
         elif input_embeddings_batch.dim() == 3:
-            # If input is already [batch_size, seq_len, features], use as is
+            # If input is already [batch_size, seq_len, features], verify dimensions
             seq_len = input_embeddings_batch.size(1)
+            feature_dim = input_embeddings_batch.size(2)
+            if feature_dim != self.in_feature:
+                raise ValueError(f"Expected feature dimension {self.in_feature}, got {feature_dim}")
         else:
             raise ValueError(f"Unexpected input dimension: {input_embeddings_batch.dim()}")
             
-        # Ensure the feature dimension matches expected size
-        if input_embeddings_batch.size(-1) != self.in_feature:
-            raise ValueError(f"Expected feature dimension {self.in_feature}, got {input_embeddings_batch.size(-1)}")
-        
         # Get feature embeddings
         feature_embedding = self.feature_embedded(input_embeddings_batch, lengths_batch, device)
         if len(feature_embedding.shape) == 2:
