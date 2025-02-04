@@ -73,78 +73,83 @@ def train_model(dataloaders, device, model, criterion, optimizer, scheduler, num
 
             with tqdm(dataloaders[phase], unit="batch") as tepoch:
                 for batch_idx, (neural_data, seq_len, input_masks, input_mask_invert, target_ids, target_mask, subject_batch) in enumerate(tepoch):
-                    # Move data to device
-                    input_embeddings_batch = neural_data.float().to(device)
-                    input_masks_batch = input_masks.to(device)
-                    input_mask_invert_batch = input_mask_invert.to(device)
-                    target_ids_batch = target_ids.to(device)
-                    seq_len_batch = seq_len.to(device)
-
-                    if phase == 'test' and not stepone:
-                        target_tokens = tokenizer.convert_ids_to_tokens(
-                            target_ids_batch[0].tolist(), skip_special_tokens=True)
-                        target_string = tokenizer.decode(
-                            target_ids_batch[0], skip_special_tokens=True)
-                        target_tokens_list.append([target_tokens])
-                        target_string_list.append(target_string)
-
-                    optimizer.zero_grad()
-
-                    with torch.set_grad_enabled(phase == 'train'):
-                        seq2seqLMoutput = model(
-                            input_embeddings_batch,
-                            input_masks_batch,
-                            input_mask_invert_batch,
-                            target_ids_batch,
-                            seq_len_batch,
-                            None,  # word_contents_batch
-                            None,  # word_contents_attn_batch
-                            stepone,
-                            subject_batch,
-                            device
-                        )
-
-                        target_ids_batch[target_ids_batch == tokenizer.pad_token_id] = -100
-                        
-                        if stepone:
-                            loss = seq2seqLMoutput
-                        else:
-                            loss = criterion(seq2seqLMoutput.permute(0, 2, 1), target_ids_batch.long())
+                    try:
+                        # Move data to device
+                        input_embeddings_batch = neural_data.float().to(device)
+                        input_masks_batch = input_masks.to(device)
+                        input_mask_invert_batch = input_mask_invert.to(device)
+                        target_ids_batch = target_ids.to(device)
+                        seq_len_batch = seq_len.to(device)
 
                         if phase == 'test' and not stepone:
-                            logits = seq2seqLMoutput
-                            probs = logits[0].softmax(dim=1)
-                            values, predictions = probs.topk(1)
-                            predictions = torch.squeeze(predictions)
-                            predicted_string = tokenizer.decode(predictions).split('</s></s>')[0].replace('<s>', '')
+                            target_tokens = tokenizer.convert_ids_to_tokens(
+                                target_ids_batch[0].tolist(), skip_special_tokens=True)
+                            target_string = tokenizer.decode(
+                                target_ids_batch[0], skip_special_tokens=True)
+                            target_tokens_list.append([target_tokens])
+                            target_string_list.append(target_string)
 
-                            predictions = predictions.tolist()
-                            truncated_prediction = []
-                            for t in predictions:
-                                if t != tokenizer.eos_token_id:
-                                    truncated_prediction.append(t)
-                                else:
-                                    break
-                            pred_tokens = tokenizer.convert_ids_to_tokens(truncated_prediction, skip_special_tokens=True)
-                            pred_tokens_list.append(pred_tokens)
-                            pred_string_list.append(predicted_string)
+                        optimizer.zero_grad()
+
+                        with torch.set_grad_enabled(phase == 'train'):
+                            seq2seqLMoutput = model(
+                                input_embeddings_batch,
+                                input_masks_batch,
+                                input_mask_invert_batch,
+                                target_ids_batch,
+                                seq_len_batch,
+                                None,  # word_contents_batch
+                                None,  # word_contents_attn_batch
+                                stepone,
+                                subject_batch,
+                                device
+                            )
+
+                            target_ids_batch[target_ids_batch == tokenizer.pad_token_id] = -100
+                            
+                            if stepone:
+                                loss = seq2seqLMoutput
+                            else:
+                                loss = criterion(seq2seqLMoutput.permute(0, 2, 1), target_ids_batch.long())
+
+                            if phase == 'test' and not stepone:
+                                logits = seq2seqLMoutput
+                                probs = logits[0].softmax(dim=1)
+                                values, predictions = probs.topk(1)
+                                predictions = torch.squeeze(predictions)
+                                predicted_string = tokenizer.decode(predictions).split('</s></s>')[0].replace('<s>', '')
+
+                                predictions = predictions.tolist()
+                                truncated_prediction = []
+                                for t in predictions:
+                                    if t != tokenizer.eos_token_id:
+                                        truncated_prediction.append(t)
+                                    else:
+                                        break
+                                pred_tokens = tokenizer.convert_ids_to_tokens(truncated_prediction, skip_special_tokens=True)
+                                pred_tokens_list.append(pred_tokens)
+                                pred_string_list.append(predicted_string)
+
+                            if phase == 'train':
+                                loss.backward()
+                                optimizer.step()
+
+                        running_loss += loss.item() * input_embeddings_batch.size(0)
+                        tepoch.set_postfix(loss=loss.item(), lr=scheduler.get_lr())
 
                         if phase == 'train':
-                            loss.backward()
-                            optimizer.step()
-
-                    running_loss += loss.item() * input_embeddings_batch.size(0)
-                    tepoch.set_postfix(loss=loss.item(), lr=scheduler.get_lr())
-
-                    if phase == 'train':
-                        val_writer.add_scalar("train_full", loss.item(), index_plot)
-                        index_plot += 1
-                    if phase == 'dev':
-                        dev_writer.add_scalar("dev_full", loss.item(), index_plot_dev)
-                        index_plot_dev += 1
-                    
-                    if phase == 'train':
-                        scheduler.step()
+                            val_writer.add_scalar("train_full", loss.item(), index_plot)
+                            index_plot += 1
+                        if phase == 'dev':
+                            dev_writer.add_scalar("dev_full", loss.item(), index_plot_dev)
+                            index_plot_dev += 1
+                        
+                        if phase == 'train':
+                            scheduler.step()
+                            
+                    except RuntimeError as e:
+                        print(f"Error in batch {batch_idx}: {str(e)}")
+                        continue
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
 
@@ -352,4 +357,3 @@ if __name__ == "__main__":
         val_writer.close()
         dev_writer.flush()
         dev_writer.close()
-
