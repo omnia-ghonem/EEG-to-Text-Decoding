@@ -154,19 +154,17 @@ class BrainTranslator(nn.Module):
         # Process input embeddings
         batch_size = input_embeddings_batch.size(0)
         
-        # Calculate proper sequence length and feature dimension
+        # Input shape validation and correction
         if input_embeddings_batch.dim() == 2:
-            # For 2D input, calculate proper dimensions
-            total_size = input_embeddings_batch.size(1)
-            feature_dim = self.in_feature
-            seq_len = total_size // feature_dim
-            input_embeddings_batch = input_embeddings_batch.view(batch_size, seq_len, feature_dim)
+            # If flattened, reshape to [batch_size, seq_len, features]
+            if input_embeddings_batch.size(1) % self.in_feature != 0:
+                raise ValueError(f"Input size {input_embeddings_batch.size(1)} must be divisible by feature size {self.in_feature}")
+            seq_len = input_embeddings_batch.size(1) // self.in_feature
+            input_embeddings_batch = input_embeddings_batch.view(batch_size, seq_len, self.in_feature)
         elif input_embeddings_batch.dim() == 3:
-            # If input is already [batch_size, seq_len, features], verify dimensions
-            seq_len = input_embeddings_batch.size(1)
-            feature_dim = input_embeddings_batch.size(2)
-            if feature_dim != self.in_feature:
-                raise ValueError(f"Expected feature dimension {self.in_feature}, got {feature_dim}")
+            # Verify dimensions for 3D input
+            if input_embeddings_batch.size(2) != self.in_feature:
+                raise ValueError(f"Expected feature dimension {self.in_feature}, got {input_embeddings_batch.size(2)}")
         else:
             raise ValueError(f"Unexpected input dimension: {input_embeddings_batch.dim()}")
             
@@ -183,8 +181,11 @@ class BrainTranslator(nn.Module):
         tmp = self.conv1d_point(tmp)
         tmp = tmp.transpose(1, 2)
         
-        # Add positional embeddings
-        brain_embedding = tmp + self.pos_embedding[:, :tmp.size(1), :]
+        # Add positional embeddings and ensure proper size
+        brain_embedding = tmp
+        if brain_embedding.size(1) > self.pos_embedding.size(1):
+            brain_embedding = brain_embedding[:, :self.pos_embedding.size(1), :]
+        brain_embedding = brain_embedding + self.pos_embedding[:, :brain_embedding.size(1), :]
         
         # Apply transformer encoder
         brain_embedding = self.encoder(brain_embedding, src_key_padding_mask=input_masks_invert)
