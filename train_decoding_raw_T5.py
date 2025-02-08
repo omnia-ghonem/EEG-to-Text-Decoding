@@ -15,14 +15,14 @@ from tqdm import tqdm
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 import sys
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/data_raw.py')
-sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_bart_lora.py')
+sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/model_decoding_raw_T5.py')
 sys.path.insert(1, '/kaggle/working/EEG-to-Text-Decoding/config.py')
 for path in sys.path:
     print(path)
 
 import data_raw
 import config
-import model_decoding_raw_bart_lora
+import model_decoding_raw_T5
 from torch.nn.utils.rnn import pad_sequence
 
 from nltk.translate.bleu_score import corpus_bleu
@@ -321,7 +321,7 @@ if __name__ == '__main__':
     # Initialize T5 model
     if model_name == 'BrainTranslator':
         pretrained = T5ForConditionalGeneration.from_pretrained('t5-large')
-        model = model_decoding_raw_bart_lora.BrainTranslator(pretrained, in_feature=1024, 
+        model = model_decoding_raw_T5.BrainTranslator(pretrained, in_feature=1024, 
                                                  decoder_embedding_size=1024,
                                                  additional_encoder_nhead=8, 
                                                  additional_encoder_dim_feedforward=4096)
